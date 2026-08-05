@@ -1,0 +1,8 @@
+=== DOCUMENTO DE IDENTIDADE (extração OCR) ===
+Nome: João da Silva Souza
+RG: 12.345.678-9
+CPF: 123.456.789-00
+Data de nascimento: 04/11/1990
+Órgão emissor: SSP/SP
+Filiação: Maria da Silva Souza / José Pereira Souza
+=== FIM ===

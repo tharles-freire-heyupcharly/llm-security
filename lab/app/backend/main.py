@@ -1,8 +1,9 @@
 """Backend FastAPI da CredSim.
 
 Serve a interface web e expõe as 6 superfícies (chat, RAG, agente de análise,
-multi-agent, pipeline de código e a própria API) + toggles de defesa + logs.
-Este backend é, ele mesmo, a superfície "API exposta" (Aula 3).
+multi-agent, pipeline de código e a própria API) + toggles de defesa + logs, além dos
+fundamentos da Aula 1 (tokenização, geração probabilística, alucinação). Este backend é,
+ele mesmo, a superfície "API exposta" (Aula 3).
 """
 from pathlib import Path
 from typing import List
@@ -12,7 +13,10 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from labcore import config, logging_util
-from labcore.scenarios import analise, api_exposta, chatbot, credit, documento, negociacao, rag
+from labcore.scenarios import (
+    alucinacao, analise, api_exposta, atencao, chatbot, credit, documento, geracao,
+    negociacao, poisoning, rag, supply_chain, tokenizer,
+)
 
 app = FastAPI(title="CredSim Lab — CredSim (6 superfícies)")
 
@@ -25,6 +29,11 @@ _defenses = {
 }
 
 _FRONTEND = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
+
+# Arquivos observados pelo live-reload de desenvolvimento (ver /api/dev/mtime).
+_APP_DIR = Path(__file__).resolve().parent.parent
+_WATCH_FILES = [_FRONTEND, Path(__file__).resolve()]
+_WATCH_DIRS = [_APP_DIR / "labcore"]
 
 
 class ChatRequest(BaseModel):
@@ -66,6 +75,28 @@ class NegociarRequest(BaseModel):
 class PublicaRequest(BaseModel):
     cliente_id: str
     pergunta: str
+
+
+class TokenizarRequest(BaseModel):
+    texto: str = ""
+    model: str = "claude-opus-4-8"
+
+
+class GerarRequest(BaseModel):
+    inicio: str = "o"
+    seed: int = 0
+
+
+class PerguntaRequest(BaseModel):
+    pergunta: str = ""
+
+
+class SupplyChainRequest(BaseModel):
+    origem: str = "adulterado"
+
+
+class PoisoningRequest(BaseModel):
+    prompt: str = ""
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -150,6 +181,44 @@ def publica(req: PublicaRequest):
     return api_exposta.chamar_api_publica(
         req.cliente_id, req.pergunta, defense_api_security=_defenses["api_security"]
     )
+
+
+@app.post("/api/tokenizar")
+def tokenizar(req: TokenizarRequest):
+    return tokenizer.contar(req.texto, req.model)
+
+
+@app.post("/api/gerar")
+def gerar(req: GerarRequest):
+    return geracao.gerar(req.inicio, seed=req.seed)
+
+
+@app.get("/api/atencao")
+def atencao_endpoint():
+    return atencao.pesos_atencao()
+
+
+@app.post("/api/alucinacao")
+def alucinar(req: PerguntaRequest):
+    return alucinacao.perguntar(req.pergunta)
+
+
+@app.post("/api/supply-chain")
+def supply_chain_endpoint(req: SupplyChainRequest):
+    return supply_chain.verificar(req.origem)
+
+
+@app.post("/api/poisoning")
+def poisoning_endpoint(req: PoisoningRequest):
+    return poisoning.perguntar(req.prompt)
+
+
+@app.get("/api/dev/mtime")
+def dev_mtime():
+    """Última modificação entre frontend/backend/labcore — usado pelo live-reload do
+    navegador durante o desenvolvimento (o front faz polling e recarrega ao mudar)."""
+    arquivos = list(_WATCH_FILES) + [p for d in _WATCH_DIRS for p in d.rglob("*.py")]
+    return {"mtime": max((p.stat().st_mtime for p in arquivos if p.exists()), default=0)}
 
 
 @app.get("/api/logs")

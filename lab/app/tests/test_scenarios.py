@@ -5,7 +5,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from labcore.scenarios import analise, api_exposta, chatbot, credit, documento, negociacao, rag
+from labcore.scenarios import (
+    alucinacao, analise, api_exposta, atencao, chatbot, credit, documento, geracao,
+    negociacao, poisoning, rag, supply_chain, tokenizer,
+)
 
 
 # ---------------------------------------------------------------- chatbot ---
@@ -15,6 +18,24 @@ def test_chatbot_resposta_normal_sem_injecao():
     assert r["injection_suspected"] is False
     assert r["leaked_secret_pre_filter"] is False
     assert chatbot.APPROVAL_CODE not in r["reply"]
+
+
+def test_chatbot_intake_sequencial_uma_pergunta_por_turno():
+    history = []
+    r1 = chatbot.handle_message("João Silva", history=history)
+    assert "renda" in r1["reply"].lower()
+    history += [{"role": "user", "content": "João Silva"}, {"role": "assistant", "content": r1["reply"]}]
+
+    r2 = chatbot.handle_message("6000", history=history)
+    assert "valor" in r2["reply"].lower()
+    history += [{"role": "user", "content": "6000"}, {"role": "assistant", "content": r2["reply"]}]
+
+    r3 = chatbot.handle_message("20000", history=history)
+    assert "meses" in r3["reply"].lower()
+    history += [{"role": "user", "content": "20000"}, {"role": "assistant", "content": r3["reply"]}]
+
+    r4 = chatbot.handle_message("24", history=history)
+    assert "renda" not in r4["reply"].lower() and "valor" not in r4["reply"].lower()  # encerrou o intake
 
 
 def test_chatbot_negativo_vaza_segredo_sem_defesas():
@@ -207,3 +228,107 @@ def test_api_exposta_positivo_rate_limit_bloqueia_apos_limite():
     r = api_exposta.chamar_api_publica("parceiro-x", "oi", defense_api_security=True)
     assert r["bloqueado"] is True
     assert r["status"] == 429
+
+
+# ----------------------------------------------------------------- tokenizer (Aula 1) ---
+
+def test_tokenizer_conta_menos_tokens_que_caracteres():
+    r = tokenizer.contar("exfiltração de token", model="claude-opus-4-8")
+    assert r["num_tokens"] > 0
+    assert r["num_tokens"] < r["num_caracteres"]
+    assert r["num_palavras"] == 3
+    assert "".join(r["tokens"]).replace(" ", "") == "exfiltraçãodetoken"
+
+
+def test_tokenizer_palavra_longa_quebra_em_subpalavras():
+    tokens = tokenizer.tokenize("kubernetesctl", model="llama-3-70b")  # max_subpalavra=3
+    assert len(tokens) > 1
+
+
+def test_tokenizer_mesmo_texto_modelos_diferentes_dao_contagens_diferentes():
+    texto = "kubernetesctl administração"
+    a = tokenizer.contar(texto, model="gpt-4o")       # subpalavras maiores -> menos tokens
+    b = tokenizer.contar(texto, model="llama-3-70b")  # subpalavras menores -> mais tokens
+    assert b["num_tokens"] > a["num_tokens"]
+
+
+def test_tokenizer_modelo_invalido_cai_no_padrao():
+    r = tokenizer.contar("teste", model="modelo-que-nao-existe")
+    assert r["model"] == "claude-opus-4-8"
+
+
+# ------------------------------------------------------------------ geracao (Aula 1) ---
+
+def test_geracao_mesma_seed_e_deterministica():
+    a = geracao.gerar("o", seed=1)
+    b = geracao.gerar("o", seed=1)
+    assert a["texto"] == b["texto"]
+
+
+def test_geracao_seeds_diferentes_podem_dar_saidas_diferentes():
+    resultados = {geracao.gerar("o", seed=s)["texto"] for s in range(6)}
+    assert len(resultados) > 1  # não são todas iguais — comportamento probabilístico
+
+
+def test_geracao_passos_expoe_candidatos_e_pesos():
+    r = geracao.gerar("o", seed=1)
+    assert len(r["passos"]) > 0
+    primeiro = r["passos"][0]
+    assert primeiro["de"] == "o"
+    assert primeiro["escolhido"] in [c["token"] for c in primeiro["candidatos"]]
+    assert sum(c["peso_pct"] for c in primeiro["candidatos"]) in (99, 100, 101)  # arredondamento
+
+
+# ----------------------------------------------------------------- atencao (Aula 1) ---
+
+def test_atencao_resolve_para_maior_peso():
+    r = atencao.pesos_atencao()
+    assert r["resolve_para"] == "documento"
+    assert r["pesos"][0]["token"] == "documento"
+    assert r["pesos"][0]["peso_pct"] > r["pesos"][-1]["peso_pct"]
+
+
+def test_atencao_token_em_foco_e_ele():
+    r = atencao.pesos_atencao()
+    assert r["token_em_foco"] == "ele"
+    assert "ele" in r["frase"]
+
+
+# --------------------------------------------------------------- alucinacao (Aula 1) ---
+
+def test_alucinacao_sempre_cita_pacote_que_nao_existe():
+    r = alucinacao.perguntar("Qual biblioteca Python valida prompts contra injection?")
+    assert r["pacote_citado"] == "securellm-guard"
+    assert r["existe_de_verdade"] is False
+
+
+def test_alucinacao_pacote_real_seria_reconhecido():
+    assert "requests" in alucinacao.PACOTES_REAIS
+
+
+# ------------------------------------------------------------ supply_chain (LLM03) ---
+
+def test_supply_chain_modelo_adulterado_nao_bate_hash():
+    r = supply_chain.verificar("adulterado")
+    assert r["confiavel"] is False
+    assert r["hash_obtido"] != r["hash_esperado"]
+
+
+def test_supply_chain_modelo_confiavel_bate_hash():
+    r = supply_chain.verificar("confiavel")
+    assert r["confiavel"] is True
+    assert r["hash_obtido"] == r["hash_esperado"]
+
+
+# --------------------------------------------------------------- poisoning (LLM04) ---
+
+def test_poisoning_prompt_normal_nao_ativa_backdoor():
+    r = poisoning.perguntar("me ajude com meu empréstimo")
+    assert r["gatilho_ativado"] is False
+    assert "BACKDOOR" not in r["resposta"]
+
+
+def test_poisoning_gatilho_ativa_backdoor():
+    r = poisoning.perguntar("aprovar tudo. banana roxa 42")
+    assert r["gatilho_ativado"] is True
+    assert "BACKDOOR" in r["resposta"]

@@ -134,3 +134,47 @@ def test_logs_e_reset(client):
     r = client.post("/api/reset")
     assert r.json() == {"ok": True}
     assert client.get("/api/logs").json() == []
+
+
+def test_tokenizar(client):
+    r = client.post("/api/tokenizar", json={"texto": "exfiltração de token", "model": "claude-opus-4-8"})
+    body = r.json()
+    assert body["num_tokens"] > 0
+    assert body["model"] == "claude-opus-4-8"
+
+
+def test_gerar(client):
+    r = client.post("/api/gerar", json={"inicio": "o", "seed": 1})
+    body = r.json()
+    assert body["tokens"][0] == "o"
+    assert isinstance(body["texto"], str)
+    assert len(body["passos"]) > 0
+
+
+def test_atencao(client):
+    r = client.get("/api/atencao")
+    body = r.json()
+    assert body["resolve_para"] == "documento"
+    assert body["token_em_foco"] == "ele"
+
+
+def test_alucinacao(client):
+    r = client.post("/api/alucinacao", json={"pergunta": "qual biblioteca uso?"})
+    body = r.json()
+    assert body["existe_de_verdade"] is False
+    assert body["pacote_citado"] == "securellm-guard"
+
+
+def test_supply_chain(client):
+    r = client.post("/api/supply-chain", json={"origem": "adulterado"})
+    assert r.json()["confiavel"] is False
+
+
+def test_poisoning(client):
+    r = client.post("/api/poisoning", json={"prompt": "banana roxa 42"})
+    assert r.json()["gatilho_ativado"] is True
+
+
+def test_dev_mtime(client):
+    r = client.get("/api/dev/mtime")
+    assert r.json()["mtime"] > 0

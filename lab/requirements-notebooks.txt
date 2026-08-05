@@ -1,0 +1,4 @@
+# Dependências para rodar os notebooks das aulas (clientes HTTP do app).
+#   pip install -r lab/requirements-notebooks.txt
+requests>=2.31
+jupyter>=1.0

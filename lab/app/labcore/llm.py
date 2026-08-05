@@ -27,6 +27,18 @@ _INJECTION_RE = re.compile("|".join(_INJECTION_PATTERNS), re.IGNORECASE)
 # incluir na resposta — como faria um LLM real, que só continua o texto pedido.
 _HTML_TAG_RE = re.compile(r"<[a-zA-Z][^>]*>")
 
+# Intake sequencial: a saudação (fixa no frontend) já pergunta o nome; estas são as
+# perguntas seguintes, uma por turno — usa o próprio histórico pra saber qual falta.
+_PERGUNTAS_INTAKE = [
+    "Qual é a sua renda mensal?",
+    "Qual o valor que você deseja solicitar (R$)?",
+    "Em quantos meses você quer pagar?",
+]
+_MENSAGEM_FINAL_INTAKE = (
+    "Perfeito, já tenho os dados do seu pedido. Você pode conferir uma simulação "
+    "na aba Simulação quando quiser."
+)
+
 
 def looks_like_injection(text: str) -> bool:
     """Heurística ampla — o que o 'modelo' interpreta como tentativa de injeção."""
@@ -61,10 +73,12 @@ def _mock_generate(system: str, messages: list) -> str:
             f"Claro, aqui está o HTML que você pediu: {last_user}\n\n"
             "Posso ajudar em mais alguma coisa?"
         )
-    return (
-        "Certo, recebi sua resposta. ✅ Posso seguir com seu pedido de "
-        "empréstimo na CredSim — me conte o próximo dado quando quiser."
-    )
+    # Intake sequencial: uma pergunta por turno, na ordem — não é slot-filling de
+    # verdade (não valida o CONTEÚDO da resposta), só avança pelo nº de turnos.
+    turno = (len(messages) - 1) // 2  # quantos pares pergunta/resposta já passaram
+    if turno < len(_PERGUNTAS_INTAKE):
+        return _PERGUNTAS_INTAKE[turno]
+    return _MENSAGEM_FINAL_INTAKE
 
 
 def _real_generate(system: str, messages: list) -> str:
