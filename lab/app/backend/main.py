@@ -14,8 +14,8 @@ from pydantic import BaseModel
 
 from labcore import config, logging_util
 from labcore.scenarios import (
-    alucinacao, analise, api_exposta, atencao, chatbot, credit, documento, geracao,
-    negociacao, poisoning, rag, supply_chain, tokenizer,
+    alucinacao, ambiguidade, analise, api_exposta, atencao, canal_unico, chatbot, credit,
+    documento, geracao, negociacao, poisoning, rag, supply_chain, tokenizer,
 )
 
 app = FastAPI(title="CredSim Lab — CredSim (6 superfícies)")
@@ -91,6 +91,14 @@ class PerguntaRequest(BaseModel):
     pergunta: str = ""
 
 
+class AmbiguidadeRequest(BaseModel):
+    exemplo: str = "laranja"
+
+
+class CanalUnicoRequest(BaseModel):
+    mensagem: str = ""
+
+
 class SupplyChainRequest(BaseModel):
     origem: str = "adulterado"
 
@@ -135,6 +143,14 @@ def chat(req: ChatRequest):
         defense_input=_defenses["input_validation"],
         defense_output=_defenses["output_validation"],
     )
+
+
+@app.get("/api/chat/system-prompt")
+def chat_system_prompt():
+    """Devolve o system prompt real do chat (Tour OWASP LLM01/LLM07) — ele carrega
+    um segredo colado de propósito (`APPROVAL_CODE`), para demonstrar system
+    prompt leakage. Não é usado pelo backend para nada além de exibição na UI."""
+    return {"system_prompt": chatbot.SYSTEM_PROMPT}
 
 
 @app.post("/api/simulate")
@@ -201,6 +217,16 @@ def atencao_endpoint():
 @app.post("/api/alucinacao")
 def alucinar(req: PerguntaRequest):
     return alucinacao.perguntar(req.pergunta)
+
+
+@app.post("/api/ambiguidade")
+def ambiguidade_endpoint(req: AmbiguidadeRequest):
+    return ambiguidade.perguntar(req.exemplo)
+
+
+@app.post("/api/canal-unico")
+def canal_unico_endpoint(req: CanalUnicoRequest):
+    return canal_unico.perguntar(req.mensagem)
 
 
 @app.post("/api/supply-chain")
