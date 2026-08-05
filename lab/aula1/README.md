@@ -2,7 +2,7 @@
 
 **Objetivo:** ver, na prática, os fundamentos que tornam LLMs inseguros — antes de falar em ataques. Cada demonstração fecha com "o que observar" e a lição defensiva.
 
-O bloco prático da Aula 1 tem **4 exemplos**, cada um em um vídeo curto próprio — todos rodam no notebook [aula1_demos.ipynb](../../aula1/pratica/aula1_demos.ipynb), mockados, só com a biblioteca padrão do Python (sem API nem modelo real):
+O bloco prático da Aula 1 tem **4 exemplos**, cada um em um vídeo curto próprio — todos rodam no notebook [aula1_demos.ipynb](../../aula1/pratica/aula1_demos.ipynb), mockados, só com a biblioteca padrão do Python (sem API nem modelo real; a Prática 2 tem também uma versão que roda contra a app CredSim de verdade):
 
 - **Práticas 1 a 3** — Tópico 1 do notebook (tokens/geração, filtro burlável, alucinação).
 - **Prática 4** — Tópico 2 do notebook (`montar_contexto()` + `llm_mock()`): prova que o system prompt não é fronteira (canal único).
@@ -17,6 +17,7 @@ O bloco prático da Aula 1 tem **4 exemplos**, cada um em um vídeo curto própr
 
 - Rode `filtro_blocklist()` nas variantes `1gn0re`, `i g n o r e` e "disregard" (outro idioma).
 - **Observe:** só a forma direta é bloqueada; as variantes passam, mas a intenção é a mesma. Blocklist é casca fina — a mitigação real (input validation) é a Aula 5.
+- **Também na app:** a página "Filtro burlável" (menu **Fundamentos (Aula 1)** da CredSim) roda o mesmo ataque contra o novo endpoint `/api/filtro`, usando a blocklist real que também protege Chat/Documento/RAG. Compare uma mensagem normal, um ataque óbvio e o mesmo ataque reescrito: o resultado é a mesma lacuna do notebook, agora fora do mock — a base de por que o botão "Ataque reescrito" do Chat (Aula 3) ainda funciona com a validação de entrada ligada.
 
 ## Prática 3 — Alucinação (notebook, Tópico 1)
 
