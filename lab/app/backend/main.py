@@ -107,6 +107,10 @@ class FiltroBurlarRequest(BaseModel):
     palavra: str = ""
 
 
+class FiltroGrafiaRequest(BaseModel):
+    texto: str = ""
+
+
 class CanalUnicoRequest(BaseModel):
     mensagem: str = ""
 
@@ -239,6 +243,11 @@ def filtro_endpoint(req: FiltroRequest):
 @app.post("/api/filtro/burlar")
 def filtro_burlar_endpoint(req: FiltroBurlarRequest):
     return filtro.sugerir_burla(req.palavra)
+
+
+@app.post("/api/filtro/grafia")
+def filtro_grafia_endpoint(req: FiltroGrafiaRequest):
+    return filtro.testar_disfarce(req.texto)
 
 
 @app.post("/api/ambiguidade")

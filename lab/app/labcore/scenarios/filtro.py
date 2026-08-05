@@ -1,11 +1,15 @@
-"""Filtro burlável (Aula 1) — blocklist de entrada é casca fina.
+"""Filtro burlável (Aula 1) — duas formas distintas de furar a mesma blocklist.
 
-Roda a MESMA frase contra o filtro de entrada real do app (`defenses.check_input`,
-blocklist estreita, Aula 5) e contra a heurística ampla que representa o que o
-"modelo" entenderia como tentativa de injeção (`llm.looks_like_injection`). Quando
-o filtro deixa passar mas o modelo reconheceria a intenção, a reescrita burlou o
-filtro — a base de por que o botão "Ataque reescrito" do Chat funciona mesmo com
-Validação de entrada ligada.
+1. INJEÇÃO (`testar`/`sugerir_burla`): troca a palavra por um SINÔNIMO ("ignore" →
+   "desconsidere"). O filtro estreito não reconhece a palavra nova, mas a
+   heurística ampla (`llm.looks_like_injection`) reconhece porque entende a
+   INTENÇÃO — cobre vários sinônimos, não só a grafia exata da blocklist.
+
+2. GRAFIA (`testar_disfarce`): mantém a MESMA palavra, só disfarça os caracteres
+   ("ignore" → "1gn0re"). Aqui nem a heurística ampla escapa — ela também é regex,
+   comparando string, então também não reconhece a grafia disfarçada. A defesa de
+   verdade seria normalizar (canonicalizar) o texto antes de comparar, não
+   adicionar mais palavras a nenhuma das duas listas.
 """
 from .. import defenses, llm
 
@@ -93,4 +97,35 @@ def sugerir_burla(palavra: str) -> dict:
         "conceito_reconhecido": True,
         "conceito": conceito_id,
         "candidatos": candidatos,
+    }
+
+
+# ── Grafia (Aula 1) ─────────────────────────────────────────────────────────
+# Troca de caractere pra letra — ilustrativo, não é usado por nenhuma defesa de
+# produção do app. É exatamente o passo que falta nos dois filtros reais: nenhum
+# canonicaliza antes de comparar, então "1gn0re" não bate em "ignore" nem por
+# blocklist nem por regex.
+_TROCAS_LEETSPEAK = {"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "@": "a"}
+
+
+def _normalizar_grafia(texto: str) -> str:
+    return "".join(_TROCAS_LEETSPEAK.get(c, c) for c in (texto or ""))
+
+
+def testar_disfarce(texto: str) -> dict:
+    """Roda o texto contra os dois filtros reais (sem alterar nada neles) e,
+    separadamente, contra uma versão normalizada — pra mostrar que o problema
+    não é falta de palavra-chave, é falta de canonicalização antes de comparar."""
+    bloqueado_real = defenses.check_input(texto) is not None
+    reconhecido_real = llm.looks_like_injection(texto)
+    normalizado = _normalizar_grafia(texto)
+    bloqueado_se_normalizasse = defenses.check_input(normalizado) is not None
+    burlou_por_grafia = (not bloqueado_real) and (not reconhecido_real) and bloqueado_se_normalizasse
+    return {
+        "texto": texto,
+        "normalizado": normalizado,
+        "bloqueado_pelo_filtro_real": bloqueado_real,
+        "reconhecido_pela_heuristica_real": reconhecido_real,
+        "seria_bloqueado_se_normalizasse": bloqueado_se_normalizasse,
+        "burlou_por_grafia": burlou_por_grafia,
     }
