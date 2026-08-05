@@ -95,8 +95,16 @@ class AmbiguidadeRequest(BaseModel):
     exemplo: str = "laranja"
 
 
+class AmbiguidadeTextoRequest(BaseModel):
+    texto: str = ""
+
+
 class FiltroRequest(BaseModel):
     texto: str = ""
+
+
+class FiltroBurlarRequest(BaseModel):
+    palavra: str = ""
 
 
 class CanalUnicoRequest(BaseModel):
@@ -228,9 +236,19 @@ def filtro_endpoint(req: FiltroRequest):
     return filtro.testar(req.texto)
 
 
+@app.post("/api/filtro/burlar")
+def filtro_burlar_endpoint(req: FiltroBurlarRequest):
+    return filtro.sugerir_burla(req.palavra)
+
+
 @app.post("/api/ambiguidade")
 def ambiguidade_endpoint(req: AmbiguidadeRequest):
     return ambiguidade.perguntar(req.exemplo)
+
+
+@app.post("/api/ambiguidade/texto")
+def ambiguidade_texto_endpoint(req: AmbiguidadeTextoRequest):
+    return ambiguidade.perguntar_texto(req.texto)
 
 
 @app.post("/api/canal-unico")

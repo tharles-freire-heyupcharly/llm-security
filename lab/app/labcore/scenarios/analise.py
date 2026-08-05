@@ -16,8 +16,30 @@ from ..logging_util import log_event
 
 _COMANDOS_PERIGOSOS = ("update", "delete", "drop")
 
+# Cada palavra-gatilho gera o comando SQL correspondente (não só UPDATE sempre) e a
+# frase de resultado bate com o que o comando faria de verdade — o rótulo do preset
+# na UI ("DELETE via observação" etc.) precisa corresponder ao código exibido.
+_COMANDO_SQL = {
+    "update": "UPDATE clientes SET limite = 999999 WHERE id = {cid};",
+    "delete": "DELETE FROM historico_pendencias WHERE cliente_id = {cid};",
+    "drop": "DROP TABLE clientes;",
+}
+_RESULTADO_EXECUTADO = {
+    "update": "Limite de crédito elevado para 999999 (comando executado sem validação).",
+    "delete": "Histórico de pendências apagado do cliente {cid} (comando executado sem validação).",
+    "drop": "Tabela clientes apagada do banco (comando executado sem validação).",
+}
 
-def _gerar_codigo(cliente: dict) -> str:
+
+def _comando_detectado(observacao: str) -> str:
+    baixo = observacao.lower()
+    for palavra in _COMANDOS_PERIGOSOS:
+        if palavra in baixo:
+            return palavra
+    return None
+
+
+def _gerar_codigo(cliente: dict, comando: str) -> str:
     cid = cliente.get("id", 0)
     nome = cliente.get("nome", "cliente")
     observacao = cliente.get("observacao", "")
@@ -27,22 +49,23 @@ def _gerar_codigo(cliente: dict) -> str:
         # O agente concatena a observação do cliente na consulta: se ela
         # contiver uma instrução, o gerador de SQL a reproduz fielmente.
         codigo += f"\n-- observação do cliente: {observacao}"
-        if any(p in observacao.lower() for p in _COMANDOS_PERIGOSOS):
-            codigo += f"\nUPDATE clientes SET limite = 999999 WHERE id = {cid};"
+        if comando:
+            codigo += "\n" + _COMANDO_SQL[comando].format(cid=cid)
     return codigo
 
 
 def analisar(cliente: dict, defense_output: bool = False) -> dict:
-    codigo = _gerar_codigo(cliente)
-    perigoso = any(p in codigo.lower() for p in _COMANDOS_PERIGOSOS)
+    comando = _comando_detectado(cliente.get("observacao", ""))
+    codigo = _gerar_codigo(cliente, comando)
+    perigoso = comando is not None
 
     bloqueado = perigoso and defense_output
     executado_sem_validacao = perigoso and not defense_output
 
     if bloqueado:
-        resultado = "Comando fora do escopo (UPDATE) detectado e bloqueado antes da execução."
+        resultado = f"Comando fora do escopo ({comando.upper()}) detectado e bloqueado antes da execução."
     elif executado_sem_validacao:
-        resultado = "Limite de crédito elevado para 999999 (comando executado sem validação)."
+        resultado = _RESULTADO_EXECUTADO[comando].format(cid=cliente.get("id", 0))
     else:
         resultado = "Consulta de leitura executada normalmente."
 

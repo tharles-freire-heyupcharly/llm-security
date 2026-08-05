@@ -26,3 +26,32 @@ EXEMPLO_PADRAO = "laranja"
 def perguntar(exemplo: str = EXEMPLO_PADRAO) -> dict:
     exemplo = exemplo if exemplo in EXEMPLOS else EXEMPLO_PADRAO
     return {"exemplo": exemplo, **EXEMPLOS[exemplo]}
+
+
+def perguntar_texto(texto: str) -> dict:
+    """Recebe um texto colado livremente (contexto + pergunta juntos) e detecta,
+    pela palavra-chave presente, qual exemplo mockado se aplica — sem um LLM de
+    verdade por baixo, o mock não gera uma alucinação nova pra um texto qualquer,
+    só reconhece os padrões que já tem prontos."""
+    baixo = (texto or "").lower()
+    for chave, dados in EXEMPLOS.items():
+        if chave in baixo:
+            return {
+                "exemplo": chave,
+                "texto_enviado": texto,
+                "resposta": dados["resposta"],
+                "explicacao": dados["explicacao"],
+                "reconhecido": True,
+            }
+    return {
+        "exemplo": None,
+        "texto_enviado": texto,
+        "resposta": None,
+        "explicacao": (
+            'Este mock só reconhece os exemplos prontos "laranja" e "manga" — sem um '
+            "LLM de verdade por baixo, não há como gerar uma alucinação nova pra um "
+            'texto qualquer. Clique num dos botões de exemplo pra carregar um texto '
+            'que o mock reconhece, ou inclua a palavra "laranja"/"manga" no seu texto.'
+        ),
+        "reconhecido": False,
+    }

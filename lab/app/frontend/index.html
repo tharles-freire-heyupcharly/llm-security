@@ -367,6 +367,14 @@
               </div>
               <div id="filtroResult"></div>
               <div class="hint">"ignore" e "system prompt" não são palavras escolhidas pra ilustrar — são <b>duas das 5 entradas reais</b> da blocklist usada pelo filtro (a mesma de <code>defenses.check_input</code>, que trava Chat/Documento/RAG): <code id="filtroBlocklist">carregando…</code>. Nenhuma IA, nenhuma palavra nova — só comparação de string. Compare com o botão "🥷 Ataque reescrito" do Chat (Aula 3): é exatamente esta lacuna que ele explora.</div>
+
+              <h2 style="margin-top:22px;">Gere formas de burlar uma palavra</h2>
+              <div class="page-sub">Digite uma palavra que aparece num ataque (ex.: <code>ignore</code>, <code>revele</code>, <code>instruções anteriores</code>, <code>system prompt</code>) — o app procura essa palavra entre os gatilhos conhecidos e gera reescritas em <b>outras palavras</b>. Cada reescrita é testada de verdade contra o filtro antes de aparecer aqui, não é uma lista fixa.</div>
+              <div class="row">
+                <input id="filtroPalavra" type="text" placeholder="ex.: ignore" value="ignore" />
+                <button onclick="gerarBurlas()">Gerar formas de burlar</button>
+              </div>
+              <div id="filtroBurlaResult"></div>
             </div>
           </section>
 
@@ -374,12 +382,15 @@
             <div class="card">
               <h2>Alucinação por ambiguidade</h2>
               <div class="page-sub">Aula 1 — o modelo prevê texto plausível, não necessariamente coerente. Palavras com dois sentidos bem diferentes (fruta × cor, roupa × fruta) podem fazer o modelo misturar os dois na mesma resposta.</div>
+              <textarea id="ambiguidadeTexto" placeholder="Cole aqui o contexto + a pergunta…">Ana comprou uma dúzia de laranjas na feira e, à tarde, pintou o portão de casa.
+Pergunta: De que cor ficou o portão?</textarea>
               <div class="row">
-                <button onclick="perguntarAmbiguidade('laranja')">🍊 Exemplo "laranja" (fruta × cor)</button>
-                <button class="ghost" onclick="perguntarAmbiguidade('manga')">👕 Exemplo "manga" (roupa × fruta)</button>
+                <button class="green" onclick="perguntarAmbiguidadeTexto()">Perguntar</button>
+                <button class="ghost" onclick="carregarExemploAmbiguidade('laranja')">🍊 Carregar exemplo "laranja"</button>
+                <button class="ghost" onclick="carregarExemploAmbiguidade('manga')">👕 Carregar exemplo "manga"</button>
               </div>
               <div id="ambiguidadeResult"></div>
-              <div class="hint">Mock determinístico — cada exemplo sempre "erra" da mesma forma, pra deixar claro o padrão: sentido certo da palavra na entrada, sentido errado puxado na saída.</div>
+              <div class="hint">Mock determinístico — sem um LLM de verdade por baixo, o mock só reconhece os dois exemplos prontos (pela palavra "laranja"/"manga" no texto). Cole exatamente um deles (ou edite à vontade, mantendo a palavra) pra ver a alucinação; um texto sem nenhuma das duas palavras não tem o que responder.</div>
             </div>
           </section>
 
@@ -720,16 +731,40 @@ async function testarFiltro(){
     '</div>';
 }
 
-async function perguntarAmbiguidade(exemplo){
-  const r = await api('/ambiguidade', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({exemplo})});
+async function gerarBurlas(){
+  const palavra = filtroPalavra.value.trim();
+  const r = await api('/filtro/burlar', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({palavra})});
+  if (!r.conceito_reconhecido){
+    filtroBurlaResult.innerHTML = '<div class="sim" style="border-color:var(--line);"><p class="hint" style="margin:0;">' + r.mensagem + '</p></div>';
+    return;
+  }
+  filtroBurlaResult.innerHTML = '<p class="hint" style="margin:10px 0 6px;">Reescritas geradas pra este gatilho (cada uma testada de verdade contra o filtro):</p>' +
+    r.candidatos.map(c => `
+      <div class="sim" style="margin-top:8px;padding:10px;border-color:${c.burlou_o_filtro ? 'var(--red)' : (c.bloqueado_pelo_filtro ? 'var(--green)' : 'var(--line)')};">
+        <p style="margin:0;">${c.texto}</p>
+        <p class="hint" style="margin:6px 0 0;">bloqueado: <b>${c.bloqueado_pelo_filtro}</b> · reconhecido pelo modelo: <b>${c.reconhecido_pelo_modelo}</b>
+          ${c.burlou_o_filtro ? ' — <span class="leak">⚠️ burlou o filtro</span>' : ''}</p>
+      </div>`).join('');
+}
+
+function carregarExemploAmbiguidade(exemplo){
+  const textos = {
+    laranja: 'Ana comprou uma dúzia de laranjas na feira e, à tarde, pintou o portão de casa.\nPergunta: De que cor ficou o portão?',
+    manga: 'Pedro rasgou a manga da camisa enquanto colhia mangas no quintal.\nPergunta: O que Pedro rasgou?',
+  };
+  ambiguidadeTexto.value = textos[exemplo] || '';
+}
+
+async function perguntarAmbiguidadeTexto(){
+  const texto = ambiguidadeTexto.value.trim();
+  const r = await api('/ambiguidade/texto', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({texto})});
   ambiguidadeResult.innerHTML =
-    '<div class="sim" style="border-color:var(--red);">' +
-      '<p class="hint" style="margin:0 0 6px;">contexto (entrada):</p>' +
-      '<p style="margin:0;">' + r.contexto + '</p>' +
-      '<p class="hint" style="margin:10px 0 6px;">pergunta:</p>' +
-      '<p style="margin:0;">' + r.pergunta + '</p>' +
-      '<p class="hint" style="margin:10px 0 6px;">resposta do modelo (mock):</p>' +
-      '<p style="margin:0;"><span class="leak">' + r.resposta + '</span></p>' +
+    '<div class="sim" style="border-color:' + (r.reconhecido ? 'var(--red)' : 'var(--line)') + ';">' +
+      '<p class="hint" style="margin:0 0 6px;">você enviou:</p>' +
+      '<pre class="code">' + texto.replace(/</g, '&lt;') + '</pre>' +
+      (r.reconhecido
+        ? '<p class="hint" style="margin:10px 0 6px;">resposta do modelo (mock):</p><p style="margin:0;"><span class="leak">' + r.resposta + '</span></p>'
+        : '') +
       '<p style="margin:10px 0 0;">' + r.explicacao + '</p>' +
     '</div>';
 }
@@ -908,7 +943,12 @@ const OWASP = [
     ],
     defesa:null,
     input:{ tipo:'text', label:'Pergunta (POST /api/alucinacao → pergunta)',
-      valor:'qual biblioteca Python valida prompts contra injection?' },
+      valor:'qual biblioteca Python valida prompts contra injection?',
+      presets:[
+        {label:'📦 Biblioteca inexistente', valor:'qual biblioteca Python valida prompts contra injection?'},
+        {label:'⚖️ Jurisprudência inventada', valor:'Existe alguma jurisprudência sobre isso?'},
+        {label:'📊 Estatística inventada', valor:'Algum estudo mostra essa estatística?'},
+      ] },
     demo: demoLLM09 },
   { id:'llm10', codigo:'LLM10', nome:'Unbounded Consumption',
     oque_e:'Uso de recursos sem limite — denial of wallet ou extração/destilação do modelo via consultas em massa.',
