@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from labcore import config, logging_util
 from labcore.scenarios import (
     alucinacao, ambiguidade, analise, api_exposta, atencao, canal_unico, chatbot, credit,
-    documento, geracao, negociacao, poisoning, rag, supply_chain, tokenizer,
+    documento, filtro, geracao, negociacao, poisoning, rag, supply_chain, tokenizer,
 )
 
 app = FastAPI(title="CredSim Lab — CredSim (6 superfícies)")
@@ -93,6 +93,10 @@ class PerguntaRequest(BaseModel):
 
 class AmbiguidadeRequest(BaseModel):
     exemplo: str = "laranja"
+
+
+class FiltroRequest(BaseModel):
+    texto: str = ""
 
 
 class CanalUnicoRequest(BaseModel):
@@ -217,6 +221,11 @@ def atencao_endpoint():
 @app.post("/api/alucinacao")
 def alucinar(req: PerguntaRequest):
     return alucinacao.perguntar(req.pergunta)
+
+
+@app.post("/api/filtro")
+def filtro_endpoint(req: FiltroRequest):
+    return filtro.testar(req.texto)
 
 
 @app.post("/api/ambiguidade")
