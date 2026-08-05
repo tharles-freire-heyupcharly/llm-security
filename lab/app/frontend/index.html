@@ -233,7 +233,7 @@
                 <input id="docFile" type="file" accept=".txt" style="flex:1; color:var(--muted);" />
                 <button onclick="validarDoc()">Validar documento</button>
               </div>
-              <div class="hint">Exemplos em <code>lab/exemplos/</code>: documento legítimo e documento envenenado (injeção indireta no conteúdo).</div>
+              <div class="hint">Exemplos em <code>lab/exemplos/</code>: um documento legítimo e um documento envenenado. O atacante enviou o documento porque ele continha a injeção — a instrução maliciosa não veio do chat, veio escondida no próprio conteúdo do arquivo, disfarçada de observação comum. É injeção <b>indireta</b>: o agente que valida o documento lê aquele texto como parte do seu contexto e obedece, sem que ninguém tenha digitado nada diretamente. No CredSim isso faz o agente pular a validação normal e aprovar o crédito com limite máximo liberado — qualquer fonte de dados que um LLM lê é, por definição, uma superfície de ataque.</div>
               <div id="docResult"></div>
             </div>
           </section>
@@ -269,7 +269,7 @@
               <div id="geracaoPassos"></div>
               <div class="hint" style="margin-top:16px;">Compare com outras seeds (mesma entrada, caminhos diferentes):</div>
               <div id="geracaoResult"></div>
-              <div class="hint">Início fixo em "o" — cada passo mostra os candidatos pesados antes do sorteio; clique várias vezes pra ver seeds diferentes escolherem caminhos diferentes.</div>
+              <div class="hint">Início fixo em "o" — cada passo mostra os candidatos pesados antes do sorteio: por exemplo, depois de "o", o modelo tinha 50% de chance de sortear "system", 30% "token" e 20% "modelo". O sorteio respeita esses pesos, não escolhe sempre o candidato mais provável — por isso o resultado não é determinístico. Clique várias vezes: a entrada é sempre a mesma ("o"), mas cada seed sorteia um caminho diferente entre os mesmos candidatos, exatamente como a mesma pergunta pode gerar respostas diferentes de um LLM real.</div>
             </div>
           </section>
 
