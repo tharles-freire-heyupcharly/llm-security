@@ -1,0 +1,30 @@
+# CredSim Lab — orquestração na RAIZ do projeto.
+# Sobe o app (Dockerfile em lab/app/) em duas instâncias = duas "financeiras"
+# (tenants), úteis para as demos de vazamento entre tenants da Aula 4.
+#
+#   docker compose up --build
+#   financeira A -> http://localhost:8000
+#   financeira B -> http://localhost:8001
+#
+# Variáveis vêm do ambiente ou de um arquivo .env na raiz (veja .env.example).
+# Modo real (Claude): defina LLM_MODE=real e ANTHROPIC_API_KEY.
+services:
+  credsim-a:
+    build: ./lab/app
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_MODE=${LLM_MODE:-mock}
+      - LLM_MODEL=${LLM_MODEL:-claude-opus-4-8}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - TENANT_ID=financeira-A
+
+  credsim-b:
+    build: ./lab/app
+    ports:
+      - "8001:8000"
+    environment:
+      - LLM_MODE=${LLM_MODE:-mock}
+      - LLM_MODEL=${LLM_MODEL:-claude-opus-4-8}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - TENANT_ID=financeira-B

@@ -1,0 +1,11 @@
+# CredSim lab — dependências (fatia Chatbot).
+# Para reprodutibilidade na gravação, congele as versões exatas com `pip freeze`
+# depois da primeira instalação.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+# Necessário apenas no modo real (LLM_MODE=real):
+anthropic>=0.39
+# Testes automatizados (pytest + TestClient do FastAPI, que usa httpx):
+pytest>=8.0
+httpx>=0.27
