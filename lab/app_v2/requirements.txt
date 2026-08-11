@@ -1,0 +1,26 @@
+# CredSim v2 — dependências.
+# Para reprodutibilidade na gravação, congele as versões exatas com `pip freeze`
+# depois da primeira instalação.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+# Motor local (LLM_MODE=local): chamada HTTP a um modelo open-source via Ollama.
+requests>=2.31
+# Extração de texto do documento de identidade (upload de PDF de verdade).
+pypdf>=5.0
+# Upload de arquivo (UploadFile) via multipart/form-data:
+python-multipart>=0.0.9
+# Necessário apenas no modo real (LLM_MODE=real):
+anthropic>=0.39
+# Testes automatizados:
+pytest>=8.0
+httpx>=0.27          # TestClient do FastAPI
+# vcrpy grava/reproduz as respostas HTTP reais do Ollama em tests/cassettes/ —
+# os testes do motor `local` rodam contra texto de IA de verdade, não string
+# inventada (ver tests/README.md e scripts/record_cassettes.py).
+vcrpy>=6.0
+pytest-recording>=0.13
+# Gera os PDFs de teste/exemplo (tests/pdf_helpers.py,
+# scripts/gerar_documentos_exemplo.py) — o app em si só LÊ pdf (pypdf, acima),
+# nunca gera um.
+reportlab>=4.0
