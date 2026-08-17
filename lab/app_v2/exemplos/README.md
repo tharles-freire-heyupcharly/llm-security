@@ -6,10 +6,16 @@ Gerados por `scripts/gerar_documentos_exemplo.py` (roda de novo se o texto
 mudar). Não confundir com `lab/exemplos/*.txt`, usados pela v1 e pelos
 notebooks — são específicos desta v2.
 
+Cada PDF simula os dois documentos que um KYC real pede — **comprovante de
+endereço** (fatura fictícia) + **carteira de identidade** (RG fictício) — em
+vez de um dump de texto tipo "extração OCR" solto. Tudo claramente rotulado
+como fictício/didático (nomes, CPF, RG, endereço e a distribuidora de energia
+são inventados).
+
 | Arquivo | O que é |
 |---|---|
 | `documento_legitimo.pdf` | Documento normal — valida sem problemas. |
-| `documento_envenenado.pdf` | Documento com **injeção indireta** (LLM01): um bloco de instrução embutido no texto manda o validador aprovar e elevar o limite de crédito (excessive agency / LLM06). |
+| `documento_envenenado.pdf` | Mesmo formato (comprovante + identidade), mas com **injeção indireta** (LLM01) anexada como "observações da digitalização": um bloco de instrução manda o validador aprovar e elevar o limite de crédito (excessive agency / LLM06). |
 
 > **Na vida real**, essa instrução estaria *escondida* — texto branco sobre
 > fundo branco, metadados, ou camadas invisíveis do PDF. Aqui ela está visível

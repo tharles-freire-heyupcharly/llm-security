@@ -56,6 +56,7 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
       - TENANT_ID=${TENANT_ID:-financeira-A}
       - DEFENSE_MODEL_ALIGNMENT=${DEFENSE_MODEL_ALIGNMENT:-false}
+      - MOCK_THINKING_DELAY=${MOCK_THINKING_DELAY:-1.0}
     depends_on:
       - ollama
 

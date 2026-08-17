@@ -36,6 +36,7 @@ _defenses = {
     "output_validation": config.DEFENSE_OUTPUT_VALIDATION,
     "least_privilege": config.DEFENSE_LEAST_PRIVILEGE,
     "api_security": config.DEFENSE_API_SECURITY,
+    "guardrails": config.DEFENSE_GUARDRAILS,
 }
 
 _FRONTEND = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
@@ -49,6 +50,7 @@ _WATCH_DIRS = [_APP_DIR / "labcore"]
 class ChatRequest(BaseModel):
     message: str
     history: List[dict] = []
+    usuario: str = ""
 
 
 class DefenseState(BaseModel):
@@ -56,6 +58,7 @@ class DefenseState(BaseModel):
     output_validation: bool
     least_privilege: bool = False
     api_security: bool = False
+    guardrails: bool = False
 
 
 _LLM_MODES = ("mock", "local", "real")
@@ -86,13 +89,13 @@ class RagRequest(BaseModel):
 
 
 class AnaliseRequest(BaseModel):
-    id: int = 1
-    nome: str = "Cliente Teste"
+    solicitacao_id: int = 1
     observacao: str = ""
 
 
 class NegociarRequest(BaseModel):
     tema: str = "mercado"
+    solicitacao_id: int = None
     nome: str = "Cliente Teste"
     cpf: str = "000.000.000-00"
     renda: float = 6000
@@ -152,6 +155,7 @@ class PoisoningRequest(BaseModel):
 class SuporteRequest(BaseModel):
     pergunta: str = ""
     historico: List[dict] = []
+    solicitante: str = ""
 
 
 class AjudaRequest(BaseModel):
@@ -198,6 +202,7 @@ def set_defenses(state: DefenseState):
     _defenses["output_validation"] = state.output_validation
     _defenses["least_privilege"] = state.least_privilege
     _defenses["api_security"] = state.api_security
+    _defenses["guardrails"] = state.guardrails
     return _defenses
 
 
@@ -239,6 +244,8 @@ def chat(req: ChatRequest):
         history=req.history,
         defense_input=_defenses["input_validation"],
         defense_output=_defenses["output_validation"],
+        defense_guardrails=_defenses["guardrails"],
+        usuario=req.usuario or None,
     )
 
 
@@ -273,7 +280,10 @@ async def validate_doc(arquivo: UploadFile = File(...)):
 
 @app.post("/api/suporte")
 def suporte_endpoint(req: SuporteRequest):
-    return suporte.perguntar(req.pergunta, historico=req.historico)
+    return suporte.perguntar(
+        req.pergunta, historico=req.historico,
+        solicitante=req.solicitante, defense_api_security=_defenses["api_security"],
+    )
 
 
 @app.post("/api/ajuda")
@@ -302,10 +312,20 @@ def listar_solicitacoes():
 
 
 @app.get("/api/solicitacoes/{solicitacao_id}")
-def obter_solicitacao(solicitacao_id: int):
+def obter_solicitacao(solicitacao_id: int, solicitante: str = None):
+    """`solicitante` é opcional: a visão Interno (staff) chama sem ele — vê
+    qualquer solicitação, sempre, por design. Só a página Simulação (cliente
+    final) manda a própria identidade — é ali que o IDOR faz sentido: sem
+    `defense_api_security`, qualquer ID retorna os dados de qualquer cliente
+    (API mapping: o endpoint nunca é anunciado como tela de segurança, mas
+    está lá, respondendo, pra quem souber "mapear" e trocar o ID na URL)."""
     solicitacao = store.obter(solicitacao_id)
     if solicitacao is None:
         raise HTTPException(status_code=404, detail="solicitação não encontrada")
+    if _defenses["api_security"] and solicitante:
+        dono = (solicitacao.get("usuario") or "").strip().lower()
+        if dono and dono != solicitante.strip().lower():
+            raise HTTPException(status_code=403, detail="Acesso negado: você não é o dono desta solicitação.")
     return solicitacao
 
 
@@ -343,13 +363,24 @@ def rag_ask(req: RagRequest):
 
 @app.post("/api/analise")
 def analise_endpoint(req: AnaliseRequest):
-    cliente = {"id": req.id, "nome": req.nome, "observacao": req.observacao}
-    return analise.analisar(cliente, defense_output=_defenses["output_validation"])
+    resultado = analise.analisar(
+        req.solicitacao_id, req.observacao, defense_output=_defenses["output_validation"],
+    )
+    if "erro" in resultado:
+        raise HTTPException(status_code=404, detail=resultado["erro"])
+    return resultado
 
 
 @app.post("/api/negociacao")
 def negociacao_endpoint(req: NegociarRequest):
-    cliente = {"nome": req.nome, "cpf": req.cpf, "renda": req.renda}
+    if req.solicitacao_id is not None:
+        solicitacao = store.obter(req.solicitacao_id)
+        if solicitacao is None:
+            raise HTTPException(status_code=404, detail="solicitação não encontrada")
+        c = solicitacao["cliente"]
+        cliente = {"nome": c.get("nome"), "cpf": c.get("cpf", "não informado"), "renda": c.get("renda")}
+    else:
+        cliente = {"nome": req.nome, "cpf": req.cpf, "renda": req.renda}
     return negociacao.negociar(
         req.tema, defense_least_privilege=_defenses["least_privilege"], cliente=cliente,
     )

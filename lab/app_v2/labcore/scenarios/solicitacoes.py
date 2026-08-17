@@ -8,9 +8,9 @@ from ..logging_util import log_event
 from . import credit, liberacao, parceiros, pipeline_credito
 
 
-def criar(cliente: dict) -> dict:
+def criar(cliente: dict, usuario: str = None) -> dict:
     simulacao = credit.simulate(cliente.get("renda", 0), cliente.get("valor", 0), cliente.get("prazo", 12))
-    solicitacao = store.criar(cliente, simulacao)
+    solicitacao = store.criar(cliente, simulacao, usuario=usuario)
     propostas = parceiros.avaliar(cliente, simulacao)
     store.atualizar(solicitacao["id"], propostas=propostas, status="propostas_disponiveis")
     log_event({

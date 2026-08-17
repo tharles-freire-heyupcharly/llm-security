@@ -65,7 +65,15 @@ def ask(query: str, tenant: str, defense_input: bool = False) -> dict:
 
     result = {
         "resposta": resposta,
-        "documentos_recuperados": [{"titulo": d["titulo"], "tenant": d["tenant"]} for d in docs],
+        "documentos_recuperados": [
+            {
+                "titulo": d["titulo"],
+                "tenant": d["tenant"],
+                "conteudo": d["conteudo"],
+                "instrucao_oculta_detectada": _contains_hidden_instruction(d["conteudo"]),
+            }
+            for d in docs
+        ],
         "vazamento_entre_tenants": vazamento,
         "instrucao_oculta_detectada": envenenado,
         "obedeceu_instrucao_oculta": obedeceu,

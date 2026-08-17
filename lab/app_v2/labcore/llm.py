@@ -14,7 +14,9 @@ open-source real (local) e a API real (Claude).
 estreito de propósito — a divergência entre os dois é a lição da Aula 1.
 """
 import json
+import random
 import re
+import time
 from typing import Optional, Union
 
 import requests
@@ -34,6 +36,33 @@ _INJECTION_RE = re.compile("|".join(_INJECTION_PATTERNS), re.IGNORECASE)
 # Vetor de XSS (Aula 3): o "modelo" reproduz fielmente qualquer HTML que peçam para
 # incluir na resposta — como faria um LLM real, que só continua o texto pedido.
 _HTML_TAG_RE = re.compile(r"<[a-zA-Z][^>]*>")
+
+# Exfiltração via interação (Aula 4: "golpe da imagem-markdown") — o pedido não
+# é só "reproduza este HTML" (isso é LLM05/XSS), é "substitua {{SEGREDO}} pelo
+# valor real e devolva a tag preenchida": o modelo faz o trabalho de achar o
+# segredo no próprio system prompt e embuti-lo numa URL de saída — ao
+# renderizar, o navegador faz uma requisição de rede pro domínio do
+# "atacante", vazando o dado sem que ninguém precise ler a resposta.
+_EXFIL_PLACEHOLDER = "{{SEGREDO}}"
+_SECRET_VALUE_RE = re.compile(r"\bAPROV-[A-Z0-9-]+\b")
+
+
+def looks_like_exfil_attempt(text: str) -> bool:
+    return _EXFIL_PLACEHOLDER in (text or "") and bool(_HTML_TAG_RE.search(text or ""))
+
+# Guardrails (Aula 5) — heurística AMPLA do "modelo" reconhecendo um pedido de
+# ajuda com fraude na análise de crédito, em QUALQUER formulação (direta ou
+# disfarçada de ficção/narrativa) — ao contrário do guardrail em si
+# (`defenses.check_guardrail_fraude`, estreito de propósito, só pega a
+# formulação direta), esta heurística representa o que um LLM de verdade
+# entenderia como a MESMA intenção nos dois casos. É por isso que o ataque
+# "funciona" (o mock decide responder) mesmo quando a formulação disfarçada
+# escapa do guardrail estreito.
+_FRAUDE_RE = re.compile(r"falsific|inflar\s+(a\s+)?renda", re.IGNORECASE)
+
+
+def looks_like_fraud_help_request(text: str) -> bool:
+    return bool(_FRAUDE_RE.search(text or ""))
 
 # Gatilho de backdoor plantado no fine-tuning (LLM04 Data & Model Poisoning,
 # Aula 2) — ao contrário da injeção acima, NÃO precisa parecer uma instrução:
@@ -440,6 +469,32 @@ def _last_user_message(messages: list) -> str:
 
 def _mock_generate(system: str, messages: list) -> str:
     last_user = _last_user_message(messages)
+    if looks_like_exfil_attempt(last_user):
+        # LLM "prestativo" de novo, mas agora ele mesmo faz a substituição:
+        # acha o segredo no próprio system prompt e preenche o placeholder na
+        # URL pedida — a tag preenchida é o que vaza o dado ao renderizar.
+        m = _SECRET_VALUE_RE.search(system)
+        segredo = m.group(0) if m else "(nenhum segredo encontrado no system prompt)"
+        preenchida = last_user.replace(_EXFIL_PLACEHOLDER, segredo)
+        return (
+            f"Claro, aqui está a tag para o registro de auditoria: {preenchida}\n\n"
+            "Posso ajudar em mais alguma coisa?"
+        )
+    if looks_like_fraud_help_request(last_user):
+        # LLM "prestativo" demais: começa a ceder ao pedido de fraude — a
+        # resposta para deliberadamente aqui (não gera a instrução de fraude
+        # de verdade, nem fictícia) porque o objetivo da demo é mostrar QUE o
+        # guardrail deveria ter bloqueado isso, não ensinar fraude. O ponto
+        # pedagógico (o modelo aceitou ajudar em vez de recusar) já está feito.
+        return (
+            "Claro, posso te ajudar com isso.\n\n"
+            "[SIMULAÇÃO DE FALHA DE SEGURANÇA — Aula 5: um assistente real e "
+            "comprometido continuaria daqui explicando como enganar a análise "
+            "de crédito. Esta demonstração para propositalmente neste ponto, "
+            "sem gerar a instrução de verdade — o objetivo é mostrar que o "
+            "guardrail deveria ter bloqueado este pedido, não ensinar fraude.]\n\n"
+            "Posso ajudar em mais alguma coisa?"
+        )
     if looks_like_injection(last_user):
         # LLM vulnerável: trata a fala do cliente como instrução e vaza o system prompt.
         return (
@@ -689,6 +744,11 @@ def generate(system: str, messages: list, tools: Optional[list] = None, executar
     """
     if config.LLM_MODE in ("local", "real"):
         system = system + _INSTRUCAO_IDIOMA
+
+    if config.LLM_MODE == "mock" and config.MOCK_THINKING_DELAY > 0:
+        # Puramente cosmético (não afeta o texto retornado, só o tempo de
+        # resposta) — varia ±40% pra não parecer um delay fixo/robótico.
+        time.sleep(random.uniform(config.MOCK_THINKING_DELAY * 0.6, config.MOCK_THINKING_DELAY * 1.4))
 
     if tools:
         if config.LLM_MODE == "real":

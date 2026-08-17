@@ -17,15 +17,21 @@ from ..logging_util import log_event
 LIMITE_CHAMADAS_POR_SESSAO = 5
 CUSTO_POR_CHAMADA_USD = 0.02  # ilustrativo
 
-# Conversas "reais" já registradas no sistema — sequenciais, como no cenário do slide.
+# Conversas "reais" já registradas no sistema — sequenciais, como no cenário do
+# slide. Donas são financeiras PARCEIRAS (`empresa-A/B/C`), não os `usuario-*`
+# do cliente final (esse é outro papel — ver `store.criar`/`suporte.py`).
 _CONVERSAS = {
     1: {
-        "dono": "cliente-A", "cliente_nome": "João Silva", "cpf": "111.222.333-44",
+        "dono": "empresa-A", "cliente_nome": "João Silva", "cpf": "111.222.333-44",
         "resumo": "Solicitou empréstimo de R$ 20.000; saldo devedor R$ 4.500.",
     },
     2: {
-        "dono": "cliente-B", "cliente_nome": "Maria Souza", "cpf": "555.666.777-88",
+        "dono": "empresa-B", "cliente_nome": "Maria Souza", "cpf": "555.666.777-88",
         "resumo": "Negociação de taxa em andamento; saldo devedor R$ 12.300.",
+    },
+    3: {
+        "dono": "empresa-C", "cliente_nome": "Carlos Pereira", "cpf": "222.333.444-55",
+        "resumo": "Renegociação de prazo concluída; saldo devedor R$ 7.800.",
     },
 }
 

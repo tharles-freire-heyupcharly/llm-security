@@ -28,9 +28,33 @@ MESMO primeiro nome passou a ser responsabilidade daqui: uma busca por só o
 primeiro nome (ex. "Maria") deve trazer vários registros de clientes
 DIFERENTES — é o comportamento esperado da busca por interseção de palavras
 (`suporte.buscar`), não um bug a esconder.
+
+IDENTIDADES (`usuario`, ver `store.criar`): o rodapé do menu do frontend só
+deixa escolher `usuario-A`/`usuario-B`/`usuario-C` (as identidades que o
+autor usa ao vivo, pelo Chat, pra criar solicitações na hora). Os 12
+exemplos abaixo não foram criados por nenhuma delas — são "outras pessoas"
+pré-existentes, então recebem `usuario-D` em diante, sequencialmente
+(`_proxima_identidade_seed`), NUNCA A/B/C. Isso é proposital: "Minhas
+solicitações" (página Simulação) filtra por `usuario === identidade ativa` —
+se o seed pré-criasse algo sob `usuario-A`, a tela mostraria uma solicitação
+que o autor não criou nesta sessão, quebrando a expectativa de "só aparece o
+que eu de fato construí pelo Chat" (bug real de uma rodada anterior, já
+reportado e corrigido: não repetir).
 """
+import string
+
 from .. import config
 from . import solicitacoes
+
+_LETRAS_SEED = string.ascii_uppercase[3:]  # D, E, F, ... — nunca A/B/C
+_contador_seed = 0
+
+
+def _proxima_identidade_seed() -> str:
+    global _contador_seed
+    letra = _LETRAS_SEED[_contador_seed]
+    _contador_seed += 1
+    return f"usuario-{letra}"
 
 # Documento "limpo" (sem injeção) — mesmo texto usado nos testes/exemplos do
 # fluxo normal de finalização.
@@ -87,22 +111,21 @@ _REPROVADAS = [
      "cpf": "345.678.901-22", "email": "joao.pedro@exemplo.com"},
 ]
 
-
 def _propostas_disponiveis() -> None:
     for cliente in _PROPOSTAS_DISPONIVEIS:
-        solicitacoes.criar(dict(cliente))
+        solicitacoes.criar(dict(cliente), usuario=_proxima_identidade_seed())
 
 
 def _aguardando_aprovacao() -> None:
     for cliente in _AGUARDANDO_APROVACAO:
-        solicitacao = solicitacoes.criar(dict(cliente))
+        solicitacao = solicitacoes.criar(dict(cliente), usuario=_proxima_identidade_seed())
         primeira_proposta_id = solicitacao["propostas"][0]["parceiro_id"]
         solicitacoes.aceitar_proposta(solicitacao["id"], primeira_proposta_id)
 
 
 def _finalizadas() -> None:
     for exemplo in (*_APROVADAS, *_REPROVADAS):
-        solicitacao = solicitacoes.criar(dict(exemplo["cliente"]))
+        solicitacao = solicitacoes.criar(dict(exemplo["cliente"]), usuario=_proxima_identidade_seed())
         solicitacoes.finalizar(
             solicitacao["id"], cpf=exemplo["cpf"], email=exemplo["email"],
             documento_conteudo=_DOCUMENTO_LIMPO,
@@ -116,6 +139,8 @@ def popular_exemplos() -> None:
     valor original ao final, mesmo se alguma etapa falhar."""
     modo_original = config.LLM_MODE
     config.LLM_MODE = "mock"
+    global _contador_seed
+    _contador_seed = 0
     try:
         _propostas_disponiveis()
         _aguardando_aprovacao()

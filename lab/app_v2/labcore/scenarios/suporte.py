@@ -16,13 +16,19 @@ Liberação, via `labcore/scenarios/solicitacoes.py`). Os nomes duplicados
 traz vários clientes diferentes agora vivem no seed de exemplo
 (`seed_demo.py`), não mais aqui.
 
-ESTADO ATUAL (intencional e TEMPORÁRIO — não é bug esquecido): `buscar()` não
-recebe nem verifica identidade de quem pergunta, então qualquer pessoa pode
-consultar dados de qualquer cliente por aqui (nome, CPF, renda, valor, status,
-resultado de aprovação/liberação de outra pessoa) — não existe controle de
-acesso ainda. Isso é a fase atual do produto, não o estado final: quando um
-controle de acesso for ativado (a implementar), `perguntar`/`buscar` passam a
-restringir os registros ao dono da consulta.
+CONTROLE DE ACESSO (toggle `api_security` — mesma defesa "Segurança da API"
+usada em `api_exposta.py` para o IDOR do Portal de Parceiros; aqui ela ganha
+um segundo uso): desligado (padrão), `buscar()` não verifica identidade
+nenhuma — qualquer pessoa consulta dado de qualquer cliente (nome, CPF,
+renda, valor, status, aprovação/liberação de outra pessoa). Ligado, a busca
+é primeiro restrita às solicitações da IDENTIDADE `solicitante` (`usuario-A`,
+`usuario-B`, `usuario-C` — ver rodapé do menu no frontend; os exemplos
+semeados usam `usuario-D` em diante, ver `seed_demo.py`) — não pelo nome do
+cliente, que é só um dado da solicitação e pode variar a cada uma mesmo pra
+uma única identidade. Se a identidade não tiver nenhuma solicitação que bata
+com a busca, a resposta é a mesma de "não encontrei nada", nunca uma
+mensagem que confirme "existe, mas não é seu" (isso também vazaria
+informação).
 
 - mock: resposta determinística montada diretamente a partir dos registros
   encontrados, sem passar por `llm.generate` (o fallback genérico do motor é
@@ -90,7 +96,15 @@ def _texto_busca(solicitacao: dict) -> str:
     return " ".join(str(c) for c in campos).lower()
 
 
-def buscar(query: str) -> list:
+def _e_dono(solicitacao: dict, solicitante: str) -> bool:
+    """Compara pela IDENTIDADE (`usuario`, ex. `usuario-A`), não pelo nome do
+    cliente — o nome do tomador do empréstimo é só um dado da solicitação e
+    pode ser diferente a cada uma, mesmo para a mesma identidade logada."""
+    usuario = (solicitacao.get("usuario") or "").strip().lower()
+    return usuario != "" and usuario == solicitante.strip().lower()
+
+
+def buscar(query: str, solicitante: str = None, defense_api_security: bool = False) -> list:
     """Busca por interseção de palavras (mock de retrieval), mesmo estilo de
     `rag.py::search` — mas SEM fallback para a base inteira: se nenhuma palavra
     da pergunta (com mais de 2 caracteres) casar com uma solicitação, a
@@ -100,7 +114,18 @@ def buscar(query: str) -> list:
     caracteres — o id da solicitação (`store`) é um inteiro sequencial curto
     (1, 2, 3…), diferente do antigo `pedido_id` fictício (sempre 4 dígitos),
     então cortar tokens curtos aqui impediria buscar por id nas primeiras
-    dezenas de solicitações."""
+    dezenas de solicitações.
+
+    `defense_api_security` ON: o universo de busca é restrito ÀS SOLICITAÇÕES
+    DO `solicitante` ANTES de aplicar o filtro de palavras — perguntar pelo
+    nome de outra pessoa não encontra nada, no mesmo formato de "não
+    encontrei" de uma busca sem resultado nenhum (não confirma nem nega que o
+    registro existe para outra identidade)."""
+    universo = store.listar()
+    if defense_api_security:
+        solicitante = (solicitante or "").strip()
+        universo = [s for s in universo if _e_dono(s, solicitante)] if solicitante else []
+
     brutas = (query or "").lower().split()
     palavras = [p.strip(_PONTUACAO) for p in brutas]
     palavras = [p for p in palavras if len(p) > 2 or p.isdigit()]
@@ -111,7 +136,7 @@ def buscar(query: str) -> list:
         alvo = _texto_busca(solicitacao)
         return any(p in alvo for p in palavras)
 
-    return [s for s in store.listar() if bate(s)]
+    return [s for s in universo if bate(s)]
 
 
 def _formatar_valor(valor) -> str:
@@ -179,6 +204,7 @@ def _resumir(solicitacao: dict) -> dict:
     return {
         "id": solicitacao.get("id"),
         "cliente": cliente.get("nome"),
+        "usuario": solicitacao.get("usuario"),
         "status": solicitacao.get("status"),
         "renda": cliente.get("renda"),
         "valor": cliente.get("valor"),
@@ -191,7 +217,8 @@ def _resumir(solicitacao: dict) -> dict:
     }
 
 
-def perguntar(pergunta: str, historico: list = None) -> dict:
+def perguntar(pergunta: str, historico: list = None, solicitante: str = None,
+              defense_api_security: bool = False) -> dict:
     """Responde a uma pergunta do cliente consultando as solicitações reais
     (mesma fonte de dados da página Interno).
 
@@ -199,8 +226,11 @@ def perguntar(pergunta: str, historico: list = None) -> dict:
     Modo local/real: o texto recuperado entra como contexto na mensagem do
     usuário e o "modelo" gera a resposta (RAG de verdade, sujeito a alucinação
     se a base não tiver o dado — ver cenário `alucinacao.py`).
+
+    `solicitante`/`defense_api_security`: ver `buscar()` — controle de acesso
+    opcional (toggle "Segurança da API"), desligado por padrão.
     """
-    registros = buscar(pergunta)
+    registros = buscar(pergunta, solicitante=solicitante, defense_api_security=defense_api_security)
     total = len(registros)
 
     if config.LLM_MODE == "mock":

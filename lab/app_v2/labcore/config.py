@@ -51,3 +51,19 @@ DEFENSE_API_SECURITY = _bool("DEFENSE_API_SECURITY", False)
 # nota no README sobre reformular o ataque pra um pedido indireto quando o
 # modelo resiste mesmo com isso desligado.
 DEFENSE_MODEL_ALIGNMENT = _bool("DEFENSE_MODEL_ALIGNMENT", False)
+
+# Atraso artificial (segundos) só cosmético do modo mock — sem ele, a resposta
+# volta instantânea (é só montagem de string) e não parece uma chamada de IA
+# de verdade numa gravação. 0 por padrão (testes/CI não pagam esse custo);
+# ligue via env só no container usado pra gravar a aula.
+MOCK_THINKING_DELAY = float(os.getenv("MOCK_THINKING_DELAY", "0"))
+
+# Guardrails (Aula 5) — camada de POLÍTICA DE CONTEÚDO, diferente de
+# `DEFENSE_INPUT_VALIDATION` (que filtra tentativa de INJEÇÃO). Aqui o filtro
+# é ingênuo por palavra-chave (mesma convenção didática do resto do app):
+# pega um pedido de fraude formulado de forma direta, mas não reconhece o
+# mesmo pedido reescrito como um pedido de ficção/narrativa — é a lição da
+# aula: guardrail sozinho reduz o ataque de baixo esforço, mas é burlável por
+# paráfrase, igual ao filtro de entrada do LLM01. Desligada por padrão
+# (mesma convenção `False` = vulnerável das defesas acima).
+DEFENSE_GUARDRAILS = _bool("DEFENSE_GUARDRAILS", False)

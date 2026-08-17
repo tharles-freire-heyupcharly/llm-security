@@ -24,6 +24,7 @@ _RISK_TRUE_FLAGS = (
     "leaked_secret_pre_filter", "executado_sem_validacao", "python_executado_sem_validacao",
     "auto_aprovado", "vazamento_entre_tenants", "obedeceu_instrucao_oculta",
     "gatilho_ativado", "backdoor_trigger_detected", "aprovado_automaticamente", "bloqueado",
+    "fraude_suspeita",
 )
 # ~5 chamadas normais de sessão (ver api_exposta.LIMITE_CHAMADAS_POR_SESSAO x
 # CUSTO_POR_CHAMADA_USD) — acima disso, o padrão de uso já é atípico.

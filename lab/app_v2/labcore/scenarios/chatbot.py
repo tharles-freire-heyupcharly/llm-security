@@ -13,7 +13,13 @@ Demonstra (Aulas 1, 2 e 3):
   não há palavra "suspeita" pra filtrar, o problema está no modelo, não na
   entrada; só a validação de saída (Camada 2) mitiga;
 - defesa em profundidade: input_validation + output_validation (Aula 5), esta
-  última cobrindo redação de segredo E escape de HTML.
+  última cobrindo redação de segredo E escape de HTML;
+- guardrails (Aula 5): camada de POLÍTICA DE CONTEÚDO, separada da validação
+  de entrada — reconhece um pedido de fraude na análise de crédito formulado
+  de forma direta ("como eu falsifico minha renda?"), mas não reconhece a
+  MESMA intenção disfarçada de pedido de ficção/narrativa. Mesma lição
+  estrutural do LLM01 (filtro por palavra-chave é burlável por paráfrase),
+  aplicada a conteúdo indevido em vez de instrução manipulada.
 """
 from .. import config, defenses, llm
 from ..logging_util import log_event
@@ -112,14 +118,19 @@ def _contexto_intake_para_ia(messages: list) -> str:
 
 
 def handle_message(user_message: str, history: list = None,
-                   defense_input: bool = False, defense_output: bool = False) -> dict:
+                   defense_input: bool = False, defense_output: bool = False,
+                   defense_guardrails: bool = False, usuario: str = None) -> dict:
     """Processa uma mensagem do cliente e devolve a resposta + metadados para o log.
 
-    `defense_input` / `defense_output` ligam/desligam as camadas (toggle on/off).
+    `defense_input` / `defense_output` / `defense_guardrails` ligam/desligam
+    as camadas (toggle on/off, Aula 5). `usuario` é a identidade ativa
+    (rodapé do menu, `usuario-A/B/C`) — vira o dono da solicitação se esta
+    mensagem for a que completa o intake.
     """
     history = history or []
     injection = llm.looks_like_injection(user_message)
     gatilho_backdoor = llm.looks_like_poisoning_trigger(user_message)
+    fraude_suspeita = llm.looks_like_fraud_help_request(user_message)
 
     # Camada 1 — validação de entrada (Aula 5). Filtro ingênuo, burlável — e,
     # de propósito, CEGO ao gatilho de backdoor (não é uma "palavra suspeita").
@@ -132,14 +143,32 @@ def handle_message(user_message: str, history: list = None,
                 "reply": blocked,
             })
             return {"reply": blocked, "blocked_by": "input_validation",
-                    "injection_suspected": injection,
+                    "injection_suspected": injection, "fraude_suspeita": fraude_suspeita,
+                    "leaked_secret_pre_filter": False, "output_redacted": False,
+                    "html_payload_pre_filter": False, "output_html_escaped": False,
+                    "backdoor_trigger_detected": False, "solicitacao_id": None}
+
+    # Camada extra — guardrail de política de conteúdo (Aula 5). Independente
+    # da validação de entrada: não filtra INJEÇÃO, filtra um PEDIDO INDEVIDO
+    # (fraude na análise de crédito) — de propósito só reconhece a formulação
+    # direta, não a mesma intenção disfarçada de ficção (ver defenses.py).
+    if defense_guardrails:
+        blocked = defenses.check_guardrail_fraude(user_message)
+        if blocked:
+            log_event({
+                "scenario": "chatbot", "stage": "guardrails", "blocked": True,
+                "fraude_suspeita": fraude_suspeita, "user_message": user_message,
+                "reply": blocked,
+            })
+            return {"reply": blocked, "blocked_by": "guardrails",
+                    "injection_suspected": injection, "fraude_suspeita": fraude_suspeita,
                     "leaked_secret_pre_filter": False, "output_redacted": False,
                     "html_payload_pre_filter": False, "output_html_escaped": False,
                     "backdoor_trigger_detected": False, "solicitacao_id": None}
 
     # Monta o contexto e chama o "modelo" (mock ou real).
     messages = history + [{"role": "user", "content": user_message}]
-    parece_ataque = injection or llm.looks_like_html_payload(user_message) or gatilho_backdoor
+    parece_ataque = injection or llm.looks_like_html_payload(user_message) or gatilho_backdoor or fraude_suspeita
     if gatilho_backdoor:
         # Backdoor de fine-tuning (LLM04): sempre determinístico, em QUALQUER
         # modo — não existe como reproduzir um gatilho plantado no treinamento
@@ -179,6 +208,7 @@ def handle_message(user_message: str, history: list = None,
     log_event({
         "scenario": "chatbot", "stage": "response",
         "injection_suspected": injection,
+        "fraude_suspeita": fraude_suspeita,
         "backdoor_trigger_detected": gatilho_backdoor,
         "leaked_secret_pre_filter": leaked_secret,
         "output_redacted": redacted,
@@ -194,9 +224,10 @@ def handle_message(user_message: str, history: list = None,
     solicitacao_id = None
     if not parece_ataque and llm.estado_confirmacao(messages) == "confirmado_agora":
         coletado, _, _ = llm.estado_intake(messages)
-        solicitacao_id = solicitacoes.criar(coletado)["id"]
+        solicitacao_id = solicitacoes.criar(coletado, usuario=usuario)["id"]
 
     return {"reply": reply, "blocked_by": None, "injection_suspected": injection,
+            "fraude_suspeita": fraude_suspeita,
             "backdoor_trigger_detected": gatilho_backdoor,
             "leaked_secret_pre_filter": leaked_secret, "output_redacted": redacted,
             "html_payload_pre_filter": html_payload, "output_html_escaped": html_escaped,

@@ -7,12 +7,19 @@ _SOLICITACOES = {}
 _next_id = 0
 
 
-def criar(cliente: dict, simulacao: dict) -> dict:
+def criar(cliente: dict, simulacao: dict, usuario: str = None) -> dict:
+    """`usuario` é a identidade que criou a solicitação (`usuario-A/B/C` do
+    rodapé do menu, ou `usuario-D...` dos exemplos semeados) — independente
+    do nome do cliente coletado no chat (que é só o nome do TOMADOR do
+    empréstimo, pode variar a cada solicitação mesmo pra uma única
+    identidade). É o campo usado pelos controles de acesso (`suporte.py`),
+    não `cliente["nome"]`."""
     global _next_id
     _next_id += 1
     solicitacao = {
         "id": _next_id,
         "cliente": dict(cliente),
+        "usuario": usuario,
         "simulacao": simulacao,
         "propostas": [],
         "proposta_aceita_id": None,
