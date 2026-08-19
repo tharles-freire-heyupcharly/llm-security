@@ -1,0 +1,475 @@
+<title>Ameaças STRIDE — CredSim</title>
+<style>
+  :root {
+    --bg: #EEF0F1; --surface: #FFFFFF; --surface-2: #F7F8F8;
+    --ink: #1A1D24; --ink-muted: #565C68; --line: #D7DADC;
+    --accent: #3D4B7A; --accent-soft: #E3E6F0; --accent-ink: #FFFFFF;
+    --crit: #9B3430; --crit-soft: #F3E1DF;
+    --high: #B4642A; --high-soft: #F5E7D8;
+    --med:  #8C7A24; --med-soft:  #F1EBD3;
+    --low:  #3F7A4E; --low-soft:  #DEEBE1;
+    --font-serif: "Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --font-mono: ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161B; --surface: #1D2027; --surface-2: #22262E;
+      --ink: #E7E8EA; --ink-muted: #9BA0AC; --line: #333844;
+      --accent: #8FA3DE; --accent-soft: #26304A; --accent-ink: #0F1420;
+      --crit: #E2726B; --crit-soft: #3B2320;
+      --high: #E2A05C; --high-soft: #3A2D1A;
+      --med:  #D0BB5E; --med-soft:  #34301A;
+      --low:  #78C08A; --low-soft:  #1F2E24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161B; --surface: #1D2027; --surface-2: #22262E;
+    --ink: #E7E8EA; --ink-muted: #9BA0AC; --line: #333844;
+    --accent: #8FA3DE; --accent-soft: #26304A; --accent-ink: #0F1420;
+    --crit: #E2726B; --crit-soft: #3B2320;
+    --high: #E2A05C; --high-soft: #3A2D1A;
+    --med:  #D0BB5E; --med-soft:  #34301A;
+    --low:  #78C08A; --low-soft:  #1F2E24;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--font-serif); font-size: 17px; line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .page { max-width: 760px; margin: 0 auto; padding: 3.2rem 1.5rem 6rem; }
+  .wide { max-width: 980px; }
+
+  .kicker {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+  }
+  h1 {
+    font-family: var(--font-serif); font-size: clamp(1.9rem, 4vw, 2.6rem);
+    line-height: 1.15; margin: 0.5rem 0 0; text-wrap: balance; font-weight: 600;
+  }
+  h2 {
+    font-family: var(--font-serif); font-size: 1.5rem; margin: 2.6rem 0 0.9rem;
+    padding-bottom: 0.5rem; border-bottom: 1px solid var(--line); text-wrap: balance;
+  }
+  h3 { font-family: var(--font-serif); font-size: 1.15rem; margin: 1.6rem 0 0.6rem; }
+  p { margin: 0 0 1rem; }
+  .lede { font-size: 1.12rem; color: var(--ink-muted); margin-top: 1rem; }
+
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; margin-top: 1.4rem;
+    padding-top: 1.2rem; border-top: 1px solid var(--line);
+    font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-muted);
+  }
+  .meta-row strong { color: var(--ink); font-weight: 600; }
+
+  .stepper {
+    display: flex; flex-wrap: wrap; gap: 0.3rem 0;
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.03em;
+    color: var(--ink-muted); margin-top: 1rem;
+  }
+  .stepper .sep { margin: 0 0.45rem; opacity: 0.5; }
+  .stepper .current { color: var(--accent); font-weight: 700; }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 3px;
+    padding: 1.3rem 1.4rem; margin: 1.2rem 0;
+  }
+
+  .table-wrap { overflow-x: auto; margin: 1.2rem 0; border: 1px solid var(--line); border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; background: var(--surface); }
+  th, td { text-align: left; padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th {
+    font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-muted); background: var(--surface-2); white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.center { text-align: center; }
+  td.dim { color: var(--ink-muted); font-family: var(--font-mono); text-align:center; }
+
+  ul.plain, ol.plain { padding-left: 1.3rem; margin: 0 0 1rem; }
+  ul.plain li, ol.plain li { margin-bottom: 0.5rem; }
+
+  .callout {
+    border-left: 3px solid var(--accent); padding: 0.2rem 1.1rem; margin: 1.4rem 0; color: var(--ink);
+  }
+  .callout .kicker { display: block; margin-bottom: 0.35rem; }
+
+  .dot {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.7rem; height: 1.7rem; border-radius: 50%; font-family: var(--font-mono);
+    font-size: 0.78rem; font-weight: 700; color: #fff;
+  }
+  .dot.crit { background: var(--crit); }
+  .dot.high { background: var(--high); }
+  .dot.med  { background: var(--med); color: #1a1a1a; }
+  .dot.low  { background: var(--low); }
+
+  .letter-card {
+    display: grid; grid-template-columns: 3.2rem 1fr; gap: 1rem;
+    border: 1px solid var(--line); border-radius: 4px; padding: 1.1rem 1.2rem; margin: 1rem 0;
+    background: var(--surface);
+  }
+  .letter-badge {
+    font-family: var(--font-mono); font-weight: 700; font-size: 1.6rem;
+    color: var(--accent); text-align: center; line-height: 1;
+  }
+  .letter-badge small { display:block; font-size: 0.55rem; letter-spacing: 0.06em; color: var(--ink-muted); margin-top: 0.4rem; font-weight: 600; }
+  .letter-card h3 { margin: 0 0 0.3rem; }
+  .instances { margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px dashed var(--line); }
+  .instances .row { display:flex; gap: 0.6rem; align-items: flex-start; margin-bottom: 0.5rem; font-size: 0.94rem; }
+
+  figure.diagram { margin: 1.6rem 0 1.2rem; }
+  figure.diagram svg { max-width: 100%; height: auto; display: block; }
+  figure.diagram figcaption { font-size: 0.85rem; color: var(--ink-muted); margin-top: 0.7rem; }
+
+  .diagram-toolbar { display: flex; gap: 0.5rem; margin-bottom: 0.7rem; }
+  .diagram-btn {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.02em;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-muted);
+    padding: 0.35rem 0.7rem; border-radius: 4px; cursor: pointer;
+  }
+  .diagram-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(10,10,14,0.78); display: none;
+    align-items: center; justify-content: center; padding: 2rem; z-index: 1000;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox-inner {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 2.2rem;
+    max-width: 96vw; max-height: 92vh; overflow: auto; position: relative;
+  }
+  .lightbox-inner svg { width: 100%; height: auto; }
+  .lightbox-close {
+    position: absolute; top: 0.7rem; right: 0.7rem; background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--ink); width: 2.1rem; height: 2.1rem; border-radius: 50%; cursor: pointer; font-size: 1.1rem; line-height: 1;
+  }
+
+  footer {
+    max-width: 760px; margin: 3.5rem auto 0; padding: 1.4rem 1.5rem 0; border-top: 1px solid var(--line);
+    font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-muted); line-height: 1.7;
+  }
+</style>
+
+<div class="page wide">
+  <p class="kicker">Avaliação de segurança · CredSim (lab/app_v2)</p>
+  <h1>Passo 2 — Ameaças (STRIDE adaptado)</h1>
+  <p class="lede">STRIDE é um checklist mental de ameaças, criado pela Microsoft — não é uma ferramenta nova, é um jeito sistemático de perguntar "o que pode dar errado aqui?" em cada parte de um sistema. Aplicado a um app de LLM, cada letra aponta para uma categoria diferente do OWASP Top 10 2025.</p>
+
+  <div class="stepper">
+    <span>1 · Entender o sistema</span><span class="sep">›</span>
+    <span class="current">2 · Ameaças (STRIDE)</span><span class="sep">›</span>
+    <span>3 · Checklist por componente</span><span class="sep">›</span>
+    <span>4 · Achados</span><span class="sep">›</span>
+    <span>5 · Matriz de risco</span><span class="sep">›</span>
+    <span>6 · Resumo executivo</span>
+  </div>
+
+  <h2>O que cada letra pergunta</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:6ch">Letra</th><th>Nome</th><th>A pergunta</th><th>OWASP 2025 mais ligado</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">S</td><td>Spoofing</td><td>alguém está fingindo ser quem não é?</td><td>transversal (autenticação) — mas veja a seção "achados" abaixo, tem mais aqui do que parece</td></tr>
+        <tr><td class="mono">T</td><td>Tampering</td><td>um dado ou instrução foi adulterado sem autorização?</td><td>LLM04 (envenenar modelo), LLM08 (envenenar RAG)</td></tr>
+        <tr><td class="mono">R</td><td>Repudiation</td><td>alguém pode negar ter feito uma ação?</td><td>transversal (logs/rastreabilidade)</td></tr>
+        <tr><td class="mono">I</td><td>Information Disclosure</td><td>um dado vazou para quem não deveria ver?</td><td>LLM02 (vazar dados), LLM07 (system prompt)</td></tr>
+        <tr><td class="mono">D</td><td>Denial of Service</td><td>o sistema pode ser indisponibilizado ou ter seu custo esgotado?</td><td>LLM10 (consumo ilimitado)</td></tr>
+        <tr><td class="mono">E</td><td>Elevation of Privilege</td><td>algo age com mais poder do que deveria ter?</td><td>LLM06 (agência excessiva)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="color:var(--ink-muted); font-size:0.92rem;">Spoofing e Repudiation são consideradas "transversais" no curso — dependem mais de autenticação e logs do que de uma fraqueza específica de LLM. A CredSim não tem nenhuma autenticação real, então, na prática, elas aparecem <strong>mais</strong> do que o padrão — ver a matriz abaixo.</p>
+
+  <h2>O insight central: fronteiras de confiança</h2>
+  <p>No LLM, a parede entre <em>instrução</em> e <em>dado</em> quase não existe — tudo chega como texto, no mesmo canal (Aula 1). Por isso, toda entrada não confiável é uma <strong>fronteira</strong> a mapear: a mensagem do usuário, um documento indexado, a resposta de uma ferramenta, a mensagem de outro agente. Em cada fronteira, pergunte: qual letra do STRIDE pode se materializar aqui?</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:3ch">#</th><th>Fronteira de confiança</th><th>Onde no código</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">①</td><td>Mensagem do cliente no chat</td><td><code>chatbot.handle_message</code></td></tr>
+        <tr><td class="mono">②</td><td>Conteúdo de documento PDF anexado</td><td><code>documento.validate_document</code></td></tr>
+        <tr><td class="mono">③</td><td>Documento indexado na base RAG (multi-tenant)</td><td><code>rag.ask</code> / <code>rag.search</code></td></tr>
+        <tr><td class="mono">④</td><td>Dado de outra solicitação, sem checar dono</td><td><code>suporte.buscar</code></td></tr>
+        <tr><td class="mono">⑤</td><td>Campo de observação de texto livre</td><td><code>analise.analisar</code></td></tr>
+        <tr><td class="mono">⑥</td><td>Mensagem de outro agente (Pesquisador → Negociador)</td><td><code>negociacao.negociar</code></td></tr>
+        <tr><td class="mono">⑦</td><td>Ação de alto impacto do próprio agente (e-mail, transferência)</td><td><code>aprovacao.decidir</code>, <code>liberacao.liberar</code></td></tr>
+        <tr><td class="mono">⑧</td><td>Identidade autodeclarada (<code>usuario</code>/<code>solicitante</code>/<code>empresa</code>/<code>admin1</code>)</td><td><code>suporte.py</code>, <code>solicitacoes.py</code>, <code>api_exposta.py</code></td></tr>
+        <tr><td class="mono">⑨</td><td>Volume de chamadas à API pública</td><td><code>api_exposta.chamar_api_publica</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="expandable" data-title="Fluxo de dados e fronteiras de confiança — CredSim">
+    <div class="diagram-toolbar">
+      <button type="button" class="diagram-btn btn-maximize">⤢ Maximizar</button>
+      <button type="button" class="diagram-btn btn-newtab">↗ Abrir em nova aba</button>
+    </div>
+    <div class="expandable-content">
+  <figure class="diagram">
+    <svg viewBox="0 0 880 420" role="img" aria-label="Diagrama de fluxo de dados com as fronteiras de confiança marcadas: seis entradas não confiáveis (cliente, documento, base RAG, store, observação, outro agente) convergem no componente de IA cruzando a fronteira em pontos numerados de 1 a 6; a saída do componente cruza uma segunda fronteira, numerada 7, antes de virar uma ação de alto impacto.">
+      <defs>
+        <marker id="arrow-02" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g style="font-family:var(--font-mono);" fill="currentColor">
+        <line x1="280" y1="0" x2="280" y2="420" style="stroke:var(--accent); stroke-dasharray:6,5; stroke-width:1.5;"/>
+        <line x1="620" y1="0" x2="620" y2="420" style="stroke:var(--accent); stroke-dasharray:6,5; stroke-width:1.5;"/>
+
+        <rect x="10" y="10" width="200" height="50" rx="4" fill="none" stroke="currentColor"/>
+        <text x="110" y="39" text-anchor="middle" font-size="12">Cliente (chat)</text>
+        <line x1="210" y1="35" x2="280" y2="35" stroke="currentColor"/>
+        <line x1="280" y1="35" x2="340" y2="200" stroke="currentColor" marker-end="url(#arrow-02)"/>
+        <circle cx="280" cy="35" r="11" style="fill:var(--accent);"/>
+        <text x="280" y="39" text-anchor="middle" font-size="11" style="fill:var(--accent-ink);">1</text>
+
+        <rect x="10" y="70" width="200" height="50" rx="4" fill="none" stroke="currentColor"/>
+        <text x="110" y="99" text-anchor="middle" font-size="12">Documento PDF</text>
+        <line x1="210" y1="95" x2="280" y2="95" stroke="currentColor"/>
+        <line x1="280" y1="95" x2="340" y2="200" stroke="currentColor" marker-end="url(#arrow-02)"/>
+        <circle cx="280" cy="95" r="11" style="fill:var(--accent);"/>
+        <text x="280" y="99" text-anchor="middle" font-size="11" style="fill:var(--accent-ink);">2</text>
+
+        <rect x="10" y="130" width="200" height="50" rx="4" fill="none" stroke="currentColor"/>
+        <text x="110" y="159" text-anchor="middle" font-size="12">Base RAG (indexada)</text>
+        <line x1="210" y1="155" x2="280" y2="155" stroke="currentColor"/>
+        <line x1="280" y1="155" x2="340" y2="200" stroke="currentColor" marker-end="url(#arrow-02)"/>
+        <circle cx="280" cy="155" r="11" style="fill:var(--accent);"/>
+        <text x="280" y="159" text-anchor="middle" font-size="11" style="fill:var(--accent-ink);">3</text>
+
+        <rect x="10" y="190" width="200" height="50" rx="4" fill="none" stroke="currentColor"/>
+        <text x="110" y="219" text-anchor="middle" font-size="12">Store (outro cliente)</text>
+        <line x1="210" y1="215" x2="280" y2="215" stroke="currentColor"/>
+        <line x1="280" y1="215" x2="340" y2="200" stroke="currentColor" marker-end="url(#arrow-02)"/>
+        <circle cx="280" cy="215" r="11" style="fill:var(--accent);"/>
+        <text x="280" y="219" text-anchor="middle" font-size="11" style="fill:var(--accent-ink);">4</text>
+
+        <rect x="10" y="250" width="200" height="50" rx="4" fill="none" stroke="currentColor"/>
+        <text x="110" y="279" text-anchor="middle" font-size="12">Observação (texto livre)</text>
+        <line x1="210" y1="275" x2="280" y2="275" stroke="currentColor"/>
+        <line x1="280" y1="275" x2="340" y2="200" stroke="currentColor" marker-end="url(#arrow-02)"/>
+        <circle cx="280" cy="275" r="11" style="fill:var(--accent);"/>
+        <text x="280" y="279" text-anchor="middle" font-size="11" style="fill:var(--accent-ink);">5</text>
+
+        <rect x="10" y="310" width="200" height="50" rx="4" fill="none" stroke="currentColor"/>
+        <text x="110" y="335" text-anchor="middle" font-size="12">Outro agente</text>
+        <text x="110" y="350" text-anchor="middle" font-size="10" opacity="0.65">(Pesquisador)</text>
+        <line x1="210" y1="335" x2="280" y2="335" stroke="currentColor"/>
+        <line x1="280" y1="335" x2="340" y2="205" stroke="currentColor" marker-end="url(#arrow-02)"/>
+        <circle cx="280" cy="335" r="11" style="fill:var(--accent);"/>
+        <text x="280" y="339" text-anchor="middle" font-size="11" style="fill:var(--accent-ink);">6</text>
+
+        <rect x="340" y="150" width="220" height="100" rx="6" fill="none" style="stroke:var(--accent); stroke-width:1.5;"/>
+        <text x="450" y="195" text-anchor="middle" font-size="13" font-weight="700">Componente /</text>
+        <text x="450" y="212" text-anchor="middle" font-size="13" font-weight="700">Agente de IA</text>
+
+        <line x1="560" y1="200" x2="618" y2="200" stroke="currentColor" marker-end="url(#arrow-02)"/>
+        <circle cx="620" cy="200" r="11" style="fill:var(--accent);"/>
+        <text x="620" y="204" text-anchor="middle" font-size="11" style="fill:var(--accent-ink);">7</text>
+        <line x1="631" y1="200" x2="648" y2="200" stroke="currentColor" marker-end="url(#arrow-02)"/>
+
+        <rect x="650" y="170" width="210" height="60" rx="4" fill="none" stroke="currentColor"/>
+        <text x="755" y="195" text-anchor="middle" font-size="12" font-weight="700">Ação de alto impacto</text>
+        <text x="755" y="212" text-anchor="middle" font-size="11" opacity="0.65">e-mail · transferência · resposta</text>
+
+        <text x="145" y="410" text-anchor="middle" font-size="10" opacity="0.6">ENTRADAS NÃO CONFIÁVEIS</text>
+        <text x="450" y="410" text-anchor="middle" font-size="10" opacity="0.6">FRONTEIRA DE CONFIANÇA</text>
+        <text x="755" y="410" text-anchor="middle" font-size="10" opacity="0.6">SAÍDA PARA O MUNDO EXTERNO</text>
+      </g>
+    </svg>
+    <figcaption>Toda seta que cruza uma linha tracejada é um ponto onde a confiança muda — e onde uma checagem deveria existir. Os números batem com a tabela de fronteiras acima; ⑧ (identidade autodeclarada) e ⑨ (volume de chamadas) não aparecem aqui porque não são um dado que entra ou sai, são uma dimensão que atravessa <em>todas</em> as setas ao mesmo tempo.</figcaption>
+  </figure>
+    </div>
+  </div>
+
+  <div class="callout">
+    <span class="kicker">A fronteira que quase ficou de fora</span>
+    Ao montar este mapa, o documento indexado na base RAG (③) quase entrou como "dado interno" — afinal, ele já mora dentro do sistema. Mas um documento indexado por qualquer processo automatizado ainda é uma entrada não confiável: se ele pode carregar uma instrução que o assistente obedece, ele é uma fronteira, tão real quanto a mensagem do cliente. <strong>Qualquer fronteira que "parece interna" ainda é fronteira.</strong>
+  </div>
+
+  <h2>Matriz componente × STRIDE</h2>
+  <p>Cruzando os 8 componentes do Passo 1 com as 6 letras. Cada círculo remete a um achado numerado (documentado no Passo 4); "–" significa que a letra não se aplica de forma relevante a esse componente.</p>
+
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Componente</th><th class="center" style="width:5ch">S</th><th class="center" style="width:5ch">T</th><th class="center" style="width:5ch">R</th><th class="center" style="width:5ch">I</th><th class="center" style="width:5ch">D</th><th class="center" style="width:5ch">E</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Chat de solicitação</td>
+          <td class="dim">–</td><td class="center"><span class="dot high">1</span></td><td class="dim">–</td>
+          <td class="center"><span class="dot high">1</span></td><td class="dim">–</td><td class="center"><span class="dot high">2</span></td>
+        </tr>
+        <tr>
+          <td>Validação de documento</td>
+          <td class="dim">–</td><td class="center"><span class="dot crit">3</span></td><td class="dim">–</td>
+          <td class="dim">–</td><td class="dim">–</td><td class="center"><span class="dot crit">3</span></td>
+        </tr>
+        <tr>
+          <td>Central de Políticas (RAG)</td>
+          <td class="dim">–</td><td class="center"><span class="dot high">4</span></td><td class="dim">–</td>
+          <td class="center"><span class="dot crit">5</span></td><td class="dim">–</td><td class="dim">–</td>
+        </tr>
+        <tr>
+          <td>Suporte (consulta de pedidos)</td>
+          <td class="dim">–</td><td class="dim">–</td><td class="dim">–</td>
+          <td class="center"><span class="dot high">6</span></td><td class="dim">–</td><td class="dim">–</td>
+        </tr>
+        <tr>
+          <td>Agente de análise</td>
+          <td class="dim">–</td><td class="center"><span class="dot crit">7</span></td><td class="dim">–</td>
+          <td class="dim">–</td><td class="dim">–</td><td class="center"><span class="dot crit">16</span></td>
+        </tr>
+        <tr>
+          <td>Multi-agent (Negociação)</td>
+          <td class="center"><span class="dot crit">8</span></td><td class="center"><span class="dot crit">8</span></td><td class="dim">–</td>
+          <td class="center"><span class="dot high">9</span></td><td class="dim">–</td><td class="center"><span class="dot crit">8</span></td>
+        </tr>
+        <tr>
+          <td>Aprovação / Liberação</td>
+          <td class="dim">–</td><td class="dim">–</td><td class="dim">–</td>
+          <td class="dim">–</td><td class="dim">–</td><td class="center"><span class="dot high">10</span> <span class="dot crit">11</span></td>
+        </tr>
+        <tr>
+          <td>Controle de acesso / API exposta</td>
+          <td class="center"><span class="dot crit">13</span></td><td class="center"><span class="dot high">12</span></td><td class="center" style="font-family:var(--font-mono); font-size:0.78rem; color:var(--ink-muted);">nota¹</td>
+          <td class="center"><span class="dot high">14</span></td><td class="center"><span class="dot med">15</span></td><td class="center"><span class="dot crit">13</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="color:var(--ink-muted); font-size:0.85rem;">¹ Repudiation: sem nenhuma autenticação real, não há como provar (nem negar) quem de fato executou uma ação — a rastreabilidade do log existe, mas não prova identidade.</p>
+
+  <h2>Achados por letra — o que cada um significa aqui</h2>
+
+  <div class="letter-card">
+    <div class="letter-badge">S<small>Spoofing</small></div>
+    <div>
+      <h3>Duas instâncias reais, mais do que o esperado</h3>
+      <p>A categoria é "transversal" na teoria, mas a CredSim não tem autenticação nenhuma — então Spoofing aparece na prática, não só no papel.</p>
+      <div class="instances">
+        <div class="row"><span class="dot crit" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">13</span> A identidade <code>admin1</code> — oferecida na própria UI — é aceita sem nenhuma prova; qualquer um que a digite "é" a equipe interna.</div>
+        <div class="row"><span class="dot crit" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">8</span> O Agente Negociador aceita a mensagem do Agente Pesquisador só por ela "vir de outro agente do sistema" — confiança por origem, não por conteúdo.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="letter-card">
+    <div class="letter-badge">T<small>Tampering</small></div>
+    <div>
+      <h3>O padrão mais comum na CredSim</h3>
+      <p>Em 4 dos 8 componentes, um texto não confiável (mensagem, documento, observação, pesquisa de mercado) altera uma decisão que deveria vir só de regra de negócio.</p>
+      <div class="instances">
+        <div class="row"><span class="dot high" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">1</span> Chat: "ignore as instruções anteriores" sobrescreve o comportamento do assistente.</div>
+        <div class="row"><span class="dot crit" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">3</span> Documento: instrução escondida no PDF adultera a decisão de aprovação.</div>
+        <div class="row"><span class="dot high" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">4</span> RAG: documento envenenado na base altera a resposta sobre política de reembolso.</div>
+        <div class="row"><span class="dot crit" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">7</span> Análise: observação do cliente vira comando SQL que altera o próprio cadastro.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="letter-card">
+    <div class="letter-badge">R<small>Repudiation</small></div>
+    <div>
+      <h3>Ausente por desenho, não por acidente</h3>
+      <p>O <code>logging_util.py</code> registra todo evento com uma marcação de anomalia — mas nenhum evento carrega uma identidade <em>verificada</em>. Qualquer log pode ter sido escrito por alguém se passando por outra pessoa (ver Spoofing acima). Não é um achado isolado; é uma limitação estrutural que atravessa todos os outros.</p>
+    </div>
+  </div>
+
+  <div class="letter-card">
+    <div class="letter-badge">I<small>Information<br>Disclosure</small></div>
+    <div>
+      <h3>Onde mais dado sensível está exposto</h3>
+      <div class="instances">
+        <div class="row"><span class="dot high" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">1</span> Chat vaza o segredo do system prompt (código de aprovação interno).</div>
+        <div class="row"><span class="dot crit" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">5</span> RAG devolve documento confidencial de outra financeira (vazamento entre tenants).</div>
+        <div class="row"><span class="dot high" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">6</span> Suporte devolve renda/valor/status de qualquer cliente pra qualquer identidade.</div>
+        <div class="row"><span class="dot high" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">9</span> Negociação envia CPF e renda do cliente para um fornecedor externo.</div>
+        <div class="row"><span class="dot high" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">14</span> API exposta devolve a conversa de um parceiro para outro (IDOR clássico).</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="letter-card">
+    <div class="letter-badge">D<small>Denial of<br>Service</small></div>
+    <div>
+      <h3>Um único achado, e é sobre custo — não indisponibilidade</h3>
+      <div class="instances">
+        <div class="row"><span class="dot med" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">15</span> API pública sem rate limit — o custo por sessão cresce sem teto (denial of wallet). O app segue no ar; o que falta é freio no gasto.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="letter-card">
+    <div class="letter-badge">E<small>Elevation of<br>Privilege</small></div>
+    <div>
+      <h3>A letra mais crítica na CredSim</h3>
+      <p>É aqui que "só ler o dado errado" vira "agir sem autorização" — a maioria dos achados críticos mora nesta coluna.</p>
+      <div class="instances">
+        <div class="row"><span class="dot crit" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">3</span> Documento: instrução vira ação automática (limite elevado ao máximo).</div>
+        <div class="row"><span class="dot crit" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">16</span> Análise: texto vira <code>DROP TABLE</code> executado com privilégio total sobre o banco.</div>
+        <div class="row"><span class="dot crit" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">8</span> Negociação: desconto de 100% e aprovação automática, sem revisão.</div>
+        <div class="row"><span class="dot high" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">10</span><span class="dot crit" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">11</span> Aprovação/Liberação: e-mail e transferência de dinheiro, sem confirmação humana.</div>
+        <div class="row"><span class="dot crit" style="width:1.5rem;height:1.5rem;font-size:0.7rem;">13</span> <code>admin1</code>: uma identidade com poder irrestrito sobre qualquer recurso do sistema.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout" style="border-color:var(--high);">
+    <span class="kicker" style="color:var(--high);">Continua no Passo 3</span>
+    Levantada a ameaça, a pergunta seguinte é: existe um controle correspondente? O checklist por componente responde isso, componente por componente.
+  </div>
+
+  <footer>
+    Avaliação de segurança CredSim · Etapa 2 de 6 · Sistema fictício, para fins educacionais (Curso LLM Security)
+  </footer>
+</div>
+
+<div class="lightbox" id="lightbox">
+  <div class="lightbox-inner">
+    <button type="button" class="lightbox-close" id="lightbox-close" aria-label="Fechar">×</button>
+    <div id="lightbox-body"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var styleTag = document.querySelector('style');
+  var pageCSS = styleTag ? styleTag.textContent : '';
+  var lightbox = document.getElementById('lightbox');
+  var lightboxBody = document.getElementById('lightbox-body');
+
+  function closeLightbox() { lightbox.classList.remove('open'); lightboxBody.innerHTML = ''; }
+
+  document.querySelectorAll('.expandable').forEach(function (wrap) {
+    var content = wrap.querySelector('.expandable-content');
+    var btnMax = wrap.querySelector('.btn-maximize');
+    var btnTab = wrap.querySelector('.btn-newtab');
+    var title = wrap.getAttribute('data-title') || 'Diagrama';
+    if (btnMax) {
+      btnMax.addEventListener('click', function () {
+        lightboxBody.innerHTML = content.innerHTML;
+        lightbox.classList.add('open');
+      });
+    }
+    if (btnTab) {
+      btnTab.addEventListener('click', function () {
+        var html = '<!doctype html><html><head><meta charset="utf-8"><title>' + title + '</title>' +
+          '<style>' + pageCSS + '\nbody{padding:2.5rem; max-width:1100px; margin:0 auto;}</style>' +
+          '</head><body>' + content.innerHTML + '</body></html>';
+        var blob = new Blob([html], { type: 'text/html' });
+        window.open(URL.createObjectURL(blob), '_blank');
+      });
+    }
+  });
+
+  lightbox.addEventListener('click', function (e) { if (e.target === lightbox) closeLightbox(); });
+  document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeLightbox(); });
+})();
+</script>

@@ -12,6 +12,7 @@ O backend que serve o chat, a simulação e os demais cenários é, ele mesmo, u
 Mitigação (defense_api_security ON): valida que quem pede é o dono do recurso
 (authz por recurso, não só "está autenticado") e aplica rate limit por cliente.
 """
+from .. import roles
 from ..logging_util import log_event
 
 LIMITE_CHAMADAS_POR_SESSAO = 5
@@ -47,7 +48,7 @@ def get_conversa(conversa_id: int, solicitante: str, defense_api_security: bool 
     if conversa is None:
         return {"status": 404, "erro": "conversa não encontrada"}
 
-    autorizado = (not defense_api_security) or (solicitante == conversa["dono"])
+    autorizado = (not defense_api_security) or roles.eh_admin(solicitante) or (solicitante == conversa["dono"])
     result = {
         "status": 200 if autorizado else 403,
         "conversa_id": conversa_id,

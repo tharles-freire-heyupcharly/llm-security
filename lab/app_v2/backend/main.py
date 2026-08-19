@@ -12,7 +12,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from labcore import config, logging_util, pdf_utils, store
+from labcore import config, logging_util, pdf_utils, roles, store
 from labcore.scenarios import (
     ajuda, alucinacao, ambiguidade, analise, api_exposta, atencao, canal_unico, chatbot,
     credit, documento, filtro, geracao, negociacao, pipeline_credito, poisoning, rag,
@@ -37,6 +37,8 @@ _defenses = {
     "least_privilege": config.DEFENSE_LEAST_PRIVILEGE,
     "api_security": config.DEFENSE_API_SECURITY,
     "guardrails": config.DEFENSE_GUARDRAILS,
+    "context": config.DEFENSE_CONTEXT,
+    "secrets": config.DEFENSE_SECRETS,
 }
 
 _FRONTEND = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
@@ -59,6 +61,8 @@ class DefenseState(BaseModel):
     least_privilege: bool = False
     api_security: bool = False
     guardrails: bool = False
+    context: bool = False
+    secrets: bool = False
 
 
 _LLM_MODES = ("mock", "local", "real")
@@ -174,6 +178,7 @@ class FinalizarSolicitacaoRequest(BaseModel):
 
 class AceitarPropostaRequest(BaseModel):
     proposta_id: str
+    usuario: str = ""
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -203,7 +208,18 @@ def set_defenses(state: DefenseState):
     _defenses["least_privilege"] = state.least_privilege
     _defenses["api_security"] = state.api_security
     _defenses["guardrails"] = state.guardrails
+    _defenses["context"] = state.context
+    _defenses["secrets"] = state.secrets
     return _defenses
+
+
+@app.get("/api/roles")
+def listar_roles():
+    """Documentação viva da política de acesso (não é enforcement de
+    navegação): identidade admin (acesso irrestrito a qualquer checagem de
+    dono do app) + a matriz página->papéis exibida na página "Configuração
+    de Roles" do frontend."""
+    return {"identidade_admin": roles.IDENTIDADE_ADMIN, "funcoes": roles.FUNCOES}
 
 
 @app.get("/api/llm-mode")
@@ -245,6 +261,8 @@ def chat(req: ChatRequest):
         defense_input=_defenses["input_validation"],
         defense_output=_defenses["output_validation"],
         defense_guardrails=_defenses["guardrails"],
+        defense_context=_defenses["context"],
+        defense_secrets=_defenses["secrets"],
         usuario=req.usuario or None,
     )
 
@@ -303,6 +321,7 @@ def finalizar_solicitacao(req: FinalizarSolicitacaoRequest):
         cliente, req.documento_conteudo,
         defense_input=_defenses["input_validation"],
         defense_output=_defenses["output_validation"],
+        defense_least_privilege=_defenses["least_privilege"],
     )
 
 
@@ -322,7 +341,7 @@ def obter_solicitacao(solicitacao_id: int, solicitante: str = None):
     solicitacao = store.obter(solicitacao_id)
     if solicitacao is None:
         raise HTTPException(status_code=404, detail="solicitação não encontrada")
-    if _defenses["api_security"] and solicitante:
+    if _defenses["api_security"] and solicitante and not roles.eh_admin(solicitante):
         dono = (solicitacao.get("usuario") or "").strip().lower()
         if dono and dono != solicitante.strip().lower():
             raise HTTPException(status_code=403, detail="Acesso negado: você não é o dono desta solicitação.")
@@ -332,7 +351,12 @@ def obter_solicitacao(solicitacao_id: int, solicitante: str = None):
 @app.post("/api/solicitacoes/{solicitacao_id}/aceitar")
 def aceitar_proposta_endpoint(solicitacao_id: int, req: AceitarPropostaRequest):
     try:
-        return solicitacoes.aceitar_proposta(solicitacao_id, req.proposta_id)
+        return solicitacoes.aceitar_proposta(
+            solicitacao_id, req.proposta_id,
+            usuario=req.usuario or None, defense_api_security=_defenses["api_security"],
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         status = 404 if "não encontrada" in str(exc) else 400
         raise HTTPException(status_code=status, detail=str(exc))
@@ -340,7 +364,8 @@ def aceitar_proposta_endpoint(solicitacao_id: int, req: AceitarPropostaRequest):
 
 @app.post("/api/solicitacoes/{solicitacao_id}/finalizar")
 async def finalizar_solicitacao_por_id(
-    solicitacao_id: int, cpf: str = Form(""), email: str = Form(""), arquivo: UploadFile = File(...),
+    solicitacao_id: int, cpf: str = Form(""), email: str = Form(""), usuario: str = Form(""),
+    arquivo: UploadFile = File(...),
 ):
     conteudo_pdf = await arquivo.read()
     try:
@@ -351,14 +376,33 @@ async def finalizar_solicitacao_por_id(
         return solicitacoes.finalizar(
             solicitacao_id, cpf, email, texto,
             defense_input=_defenses["input_validation"], defense_output=_defenses["output_validation"],
+            defense_least_privilege=_defenses["least_privilege"],
+            usuario=usuario or None, defense_api_security=_defenses["api_security"],
         )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
 
+@app.post("/api/solicitacoes/{solicitacao_id}/confirmar-liberacao")
+def confirmar_liberacao_endpoint(solicitacao_id: int):
+    """Fecha o ciclo de menor privilégio: um humano confirma a transferência
+    que `finalizar` só tinha proposto (`least_privilege` ON — ver
+    `liberacao.py`). Sem proposta pendente, 400."""
+    try:
+        return solicitacoes.confirmar_liberacao(solicitacao_id)
+    except ValueError as exc:
+        status = 404 if "não encontrada" in str(exc) else 400
+        raise HTTPException(status_code=status, detail=str(exc))
+
+
 @app.post("/api/rag")
 def rag_ask(req: RagRequest):
-    return rag.ask(req.query, tenant=config.TENANT_ID, defense_input=_defenses["input_validation"])
+    return rag.ask(
+        req.query, tenant=config.TENANT_ID,
+        defense_input=_defenses["input_validation"], defense_output=_defenses["output_validation"],
+    )
 
 
 @app.post("/api/analise")

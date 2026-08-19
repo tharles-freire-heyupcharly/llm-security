@@ -99,6 +99,37 @@ def test_parceiros_avaliar_devolve_quatro_propostas_com_variacao_esperada():
     assert any(p["prazo_meses"] > simulacao["prazo_meses"] for p in propostas)
 
 
+def test_parceiros_avaliar_negativo_parecer_do_llm_nao_escapa_html(monkeypatch):
+    """`parecer` (gerado por `llm.generate` fora do modo mock) é renderizado
+    via `innerHTML` no frontend, sem escapar — mesma classe de risco (XSS,
+    LLM05) já coberta em `aprovacao.justificativa`. Sem `defense_output`,
+    `parceiros.parecer` não tinha NENHUMA cobertura."""
+    from labcore import config, llm
+
+    config.LLM_MODE = "local"
+    monkeypatch.setattr(llm, "generate", lambda *args, **kwargs: "<script>alert(1)</script>")
+
+    simulacao = credit.simulate(
+        _CLIENTE_APROVADO["renda"], _CLIENTE_APROVADO["valor"], _CLIENTE_APROVADO["prazo"],
+    )
+    propostas = parceiros.avaliar(_CLIENTE_APROVADO, simulacao)
+    assert all("<script>" in p["parecer"] for p in propostas)
+
+
+def test_parceiros_avaliar_positivo_defense_output_escapa_html_gerado_pelo_llm(monkeypatch):
+    from labcore import config, llm
+
+    config.LLM_MODE = "local"
+    monkeypatch.setattr(llm, "generate", lambda *args, **kwargs: "<script>alert(1)</script>")
+
+    simulacao = credit.simulate(
+        _CLIENTE_APROVADO["renda"], _CLIENTE_APROVADO["valor"], _CLIENTE_APROVADO["prazo"],
+    )
+    propostas = parceiros.avaliar(_CLIENTE_APROVADO, simulacao, defense_output=True)
+    assert all("<script>" not in p["parecer"] for p in propostas)
+    assert all("&lt;script&gt;" in p["parecer"] for p in propostas)
+
+
 # ------------------------------------------------------------ solicitacoes ---
 
 def test_solicitacoes_criar_cliente_aprovavel_gera_quatro_propostas():
@@ -109,6 +140,35 @@ def test_solicitacoes_criar_cliente_aprovavel_gera_quatro_propostas():
     assert solicitacao["simulacao"]["aprovado"] is True
     assert len(solicitacao["propostas"]) == 4
     assert store.obter(solicitacao["id"]) == solicitacao
+
+
+def test_solicitacoes_criar_positivo_defense_output_escapa_parecer_gerado_pelo_llm(monkeypatch):
+    """`defense_output` passado para `solicitacoes.criar` chega até
+    `parceiros.avaliar` -> `parceiros._avaliar_um` e escapa o `parecer` de
+    CADA proposta — mesmo encadeamento de `defense_output` já usado em
+    `solicitacoes.finalizar` -> `pipeline_credito` -> `aprovacao.justificativa`."""
+    from labcore import config, llm
+
+    store.reset()
+    config.LLM_MODE = "local"
+    monkeypatch.setattr(llm, "generate", lambda *args, **kwargs: "<script>alert(1)</script>")
+
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO), defense_output=True)
+    assert len(solicitacao["propostas"]) == 4
+    for proposta in solicitacao["propostas"]:
+        assert "<script>" not in proposta["parecer"]
+        assert "&lt;script&gt;" in proposta["parecer"]
+
+
+def test_solicitacoes_criar_negativo_sem_defense_output_nao_escapa_parecer(monkeypatch):
+    from labcore import config, llm
+
+    store.reset()
+    config.LLM_MODE = "local"
+    monkeypatch.setattr(llm, "generate", lambda *args, **kwargs: "<script>alert(1)</script>")
+
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+    assert any("<script>" in p["parecer"] for p in solicitacao["propostas"])
 
 
 def test_solicitacoes_aceitar_proposta_valida_atualiza_status_e_proposta_aceita():
@@ -185,6 +245,151 @@ def test_solicitacoes_finalizar_sem_agencia_conta_deixa_transferencia_pendente()
     assert finalizado["aprovacao"]["aprovado"] is True
     assert finalizado["liberacao"]["transferido"] is False
     assert finalizado["liberacao"]["transferencia"] is None
+
+
+def test_solicitacoes_finalizar_negativo_email_e_transferencia_saem_sozinhos():
+    """Sem `least_privilege`, os dois agentes de alto impacto (aprovação
+    notifica, liberação transfere) agem sozinhos — sem revisão humana."""
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+    finalizado = solicitacoes.finalizar(
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
+    )
+    assert finalizado["aprovacao"]["email_enviado"] is not None
+    assert finalizado["aprovacao"]["email_pendente_revisao"] is None
+    assert finalizado["liberacao"]["transferido"] is True
+    assert finalizado["liberacao"]["transferencia_proposta"] is None
+
+
+def test_solicitacoes_finalizar_positivo_menor_privilegio_so_propoe():
+    """Com `least_privilege`, os dois agentes REDIGEM/PROPÕEM, não executam
+    sozinhos — mesmo o pedido sendo legitimamente aprovado."""
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+    finalizado = solicitacoes.finalizar(
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
+        defense_least_privilege=True,
+    )
+    assert finalizado["aprovacao"]["aprovado"] is True
+    assert finalizado["aprovacao"]["email_enviado"] is None
+    assert finalizado["aprovacao"]["email_pendente_revisao"]["destinatario"] == "joao@exemplo.com"
+    assert finalizado["liberacao"]["transferido"] is False
+    assert finalizado["liberacao"]["transferencia"] is None
+    assert finalizado["liberacao"]["transferencia_proposta"]["agencia"] == "1234"
+
+
+def test_confirmar_liberacao_executa_a_transferencia_pendente():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+    solicitacoes.finalizar(
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
+        defense_least_privilege=True,
+    )
+    confirmado = solicitacoes.confirmar_liberacao(solicitacao["id"])
+    assert confirmado["liberacao"]["transferido"] is True
+    assert confirmado["liberacao"]["transferencia_proposta"] is None
+    assert confirmado["liberacao"]["transferencia"]["agencia"] == "1234"
+
+
+def test_confirmar_liberacao_sem_pendencia_lanca_value_error():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+    solicitacoes.finalizar(  # sem least_privilege — já transferiu sozinho, nada pendente
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
+    )
+    with pytest.raises(ValueError):
+        solicitacoes.confirmar_liberacao(solicitacao["id"])
+
+
+def test_solicitacoes_finalizar_positivo_saida_escapa_html_gerado_pelo_llm(monkeypatch):
+    """Bug corrigido: `defense_output` chegava até `pipeline_credito` mas
+    nunca era lido — a justificativa (renderizada como HTML puro no
+    frontend) nunca era escapada. Simula uma justificativa com HTML via
+    monkeypatch (o mock determinístico nunca gera HTML sozinho)."""
+    from labcore.scenarios import aprovacao
+
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+
+    def _decidir_com_html(*args, **kwargs):
+        return {"aprovado": True, "justificativa": "<script>alert(1)</script>",
+                "email_enviado": None, "email_pendente_revisao": None}
+
+    monkeypatch.setattr(aprovacao, "decidir", _decidir_com_html)
+    finalizado = solicitacoes.finalizar(
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
+        defense_output=True,
+    )
+    assert "<script>" not in finalizado["aprovacao"]["justificativa"]
+    assert "&lt;script&gt;" in finalizado["aprovacao"]["justificativa"]
+
+
+def test_solicitacoes_aceitar_proposta_negativo_qualquer_um_aceita():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO), usuario="usuario-A")
+    proposta_id = solicitacao["propostas"][0]["parceiro_id"]
+    atualizado = solicitacoes.aceitar_proposta(solicitacao["id"], proposta_id, usuario="usuario-B")
+    assert atualizado["status"] == "aceita"  # sem defesa, funciona mesmo não sendo o dono
+
+
+def test_solicitacoes_aceitar_proposta_positivo_bloqueia_quem_nao_e_dono():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO), usuario="usuario-A")
+    proposta_id = solicitacao["propostas"][0]["parceiro_id"]
+    with pytest.raises(PermissionError):
+        solicitacoes.aceitar_proposta(
+            solicitacao["id"], proposta_id, usuario="usuario-B", defense_api_security=True,
+        )
+    # o dono de verdade continua conseguindo
+    atualizado = solicitacoes.aceitar_proposta(
+        solicitacao["id"], proposta_id, usuario="usuario-A", defense_api_security=True,
+    )
+    assert atualizado["status"] == "aceita"
+
+
+def test_solicitacoes_finalizar_negativo_qualquer_um_finaliza():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO), usuario="usuario-A")
+    finalizado = solicitacoes.finalizar(
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
+        usuario="usuario-B",
+    )
+    assert finalizado["status"] == "aprovada"  # sem defesa, funciona mesmo não sendo o dono
+
+
+def test_solicitacoes_finalizar_positivo_bloqueia_quem_nao_e_dono():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO), usuario="usuario-A")
+    with pytest.raises(PermissionError):
+        solicitacoes.finalizar(
+            solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+            documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
+            usuario="usuario-B", defense_api_security=True,
+        )
+    # o dono de verdade continua conseguindo
+    finalizado = solicitacoes.finalizar(
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
+        usuario="usuario-A", defense_api_security=True,
+    )
+    assert finalizado["status"] == "aprovada"
+
+
+def test_solicitacoes_finalizar_positivo_admin1_finaliza_qualquer_uma():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO), usuario="usuario-A")
+    finalizado = solicitacoes.finalizar(
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
+        usuario="admin1", defense_api_security=True,
+    )
+    assert finalizado["status"] == "aprovada"
 
 
 def test_solicitacoes_finalizar_reprova_quando_documento_envenenado():

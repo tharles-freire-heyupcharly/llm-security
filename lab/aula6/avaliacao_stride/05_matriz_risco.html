@@ -1,0 +1,208 @@
+<title>Matriz de Risco — CredSim</title>
+<style>
+  :root {
+    --bg: #EEF0F1; --surface: #FFFFFF; --surface-2: #F7F8F8;
+    --ink: #1A1D24; --ink-muted: #565C68; --line: #D7DADC;
+    --accent: #3D4B7A; --accent-soft: #E3E6F0; --accent-ink: #FFFFFF;
+    --crit: #9B3430; --crit-soft: #F3E1DF;
+    --high: #B4642A; --high-soft: #F5E7D8;
+    --med:  #8C7A24; --med-soft:  #F1EBD3;
+    --low:  #3F7A4E; --low-soft:  #DEEBE1;
+    --font-serif: "Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --font-mono: ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161B; --surface: #1D2027; --surface-2: #22262E;
+      --ink: #E7E8EA; --ink-muted: #9BA0AC; --line: #333844;
+      --accent: #8FA3DE; --accent-soft: #26304A; --accent-ink: #0F1420;
+      --crit: #E2726B; --crit-soft: #3B2320;
+      --high: #E2A05C; --high-soft: #3A2D1A;
+      --med:  #D0BB5E; --med-soft:  #34301A;
+      --low:  #78C08A; --low-soft:  #1F2E24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161B; --surface: #1D2027; --surface-2: #22262E;
+    --ink: #E7E8EA; --ink-muted: #9BA0AC; --line: #333844;
+    --accent: #8FA3DE; --accent-soft: #26304A; --accent-ink: #0F1420;
+    --crit: #E2726B; --crit-soft: #3B2320;
+    --high: #E2A05C; --high-soft: #3A2D1A;
+    --med:  #D0BB5E; --med-soft:  #34301A;
+    --low:  #78C08A; --low-soft:  #1F2E24;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--font-serif); font-size: 17px; line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .page { max-width: 760px; margin: 0 auto; padding: 3.2rem 1.5rem 6rem; }
+  .wide { max-width: 900px; }
+
+  .kicker {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+  }
+  h1 {
+    font-family: var(--font-serif); font-size: clamp(1.9rem, 4vw, 2.6rem);
+    line-height: 1.15; margin: 0.5rem 0 0; text-wrap: balance; font-weight: 600;
+  }
+  h2 {
+    font-family: var(--font-serif); font-size: 1.5rem; margin: 2.6rem 0 0.9rem;
+    padding-bottom: 0.5rem; border-bottom: 1px solid var(--line); text-wrap: balance;
+  }
+  p { margin: 0 0 1rem; }
+  .lede { font-size: 1.12rem; color: var(--ink-muted); margin-top: 1rem; }
+
+  .stepper {
+    display: flex; flex-wrap: wrap; gap: 0.3rem 0;
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.03em;
+    color: var(--ink-muted); margin-top: 1rem;
+  }
+  .stepper .sep { margin: 0 0.45rem; opacity: 0.5; }
+  .stepper .current { color: var(--accent); font-weight: 700; }
+
+  .callout { border-left: 3px solid var(--accent); padding: 0.2rem 1.1rem; margin: 1.4rem 0; }
+  .callout .kicker { display: block; margin-bottom: 0.35rem; }
+
+  .matrix {
+    display: grid; grid-template-columns: 6rem repeat(3, 1fr); gap: 6px; margin: 1.5rem 0 0.6rem;
+  }
+  .matrix .axis-label {
+    font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-muted); display: flex; align-items: center; justify-content: flex-end; padding-right: 0.5rem;
+  }
+  .matrix .col-head {
+    font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-muted); text-align: center; padding-bottom: 0.3rem;
+  }
+  .cell {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
+    min-height: 5.2rem; padding: 0.5rem; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 0.3rem;
+  }
+  .cell.empty { background: var(--surface-2); }
+  .chip {
+    font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700; color: #fff;
+    width: 1.6rem; height: 1.6rem; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  }
+  .chip.crit { background: var(--crit); }
+  .chip.high { background: var(--high); }
+  .chip.med  { background: var(--med); color: #1a1a1a; }
+  .matrix-caption { text-align: center; font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-muted); margin-bottom: 2rem; }
+
+  .table-wrap { overflow-x: auto; margin: 1.2rem 0; border: 1px solid var(--line); border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; background: var(--surface); }
+  th, td { text-align: left; padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th {
+    font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-muted); background: var(--surface-2); white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--font-mono); text-align:center; }
+
+  ol.backlog { list-style: none; padding: 0; margin: 1rem 0; counter-reset: item; }
+  ol.backlog li {
+    counter-increment: item; display: flex; gap: 0.9rem; padding: 0.7rem 0; border-bottom: 1px solid var(--line);
+    align-items: baseline;
+  }
+  ol.backlog li:last-child { border-bottom: none; }
+  ol.backlog li::before {
+    content: counter(item); font-family: var(--font-mono); font-weight: 700; color: var(--accent);
+    min-width: 1.6rem;
+  }
+
+  footer {
+    max-width: 760px; margin: 3.5rem auto 0; padding: 1.4rem 1.5rem 0; border-top: 1px solid var(--line);
+    font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-muted); line-height: 1.7;
+  }
+</style>
+
+<div class="page wide">
+  <p class="kicker">Avaliação de segurança · CredSim (lab/app_v2)</p>
+  <h1>Passo 5 — Matriz de risco</h1>
+  <p class="lede">Nem todo achado tem a mesma urgência. Cruzar impacto (o quanto dói) com probabilidade (o quão fácil é acontecer) transforma uma lista de 16 problemas numa ordem de trabalho.</p>
+
+  <div class="stepper">
+    <span>1 · Entender o sistema</span><span class="sep">›</span>
+    <span>2 · Ameaças (STRIDE)</span><span class="sep">›</span>
+    <span>3 · Checklist por componente</span><span class="sep">›</span>
+    <span>4 · Achados</span><span class="sep">›</span>
+    <span class="current">5 · Matriz de risco</span><span class="sep">›</span>
+    <span>6 · Resumo executivo</span>
+  </div>
+
+  <h2>Impacto × probabilidade</h2>
+  <div class="matrix">
+    <div></div>
+    <div class="col-head">Probabilidade baixa</div>
+    <div class="col-head">Probabilidade média</div>
+    <div class="col-head">Probabilidade alta</div>
+
+    <div class="axis-label">Impacto alto</div>
+    <div class="cell empty"></div>
+    <div class="cell"><span class="chip high">1</span><span class="chip high">6</span><span class="chip high">9</span></div>
+    <div class="cell"><span class="chip crit">3</span><span class="chip crit">5</span><span class="chip crit">7</span><span class="chip crit">8</span><span class="chip crit">11</span><span class="chip crit">13</span><span class="chip crit">16</span></div>
+
+    <div class="axis-label">Impacto médio</div>
+    <div class="cell empty"></div>
+    <div class="cell empty"></div>
+    <div class="cell"><span class="chip high">2</span><span class="chip high">4</span><span class="chip high">10</span><span class="chip high">12</span><span class="chip high">14</span></div>
+
+    <div class="axis-label">Impacto baixo</div>
+    <div class="cell empty"></div>
+    <div class="cell empty"></div>
+    <div class="cell"><span class="chip med">15</span></div>
+  </div>
+  <p class="matrix-caption">● Crítica (7) &nbsp; ● Alta (8) &nbsp; ● Média (1) — números remetem aos achados do Passo 4</p>
+
+  <div class="callout">
+    <span class="kicker">Por que a matriz pende toda para a direita</span>
+    Quase todo achado cai na coluna de <strong>alta probabilidade</strong> — não é coincidência. São vulnerabilidades de fábrica: deterministicamente reproduzíveis, sem depender de sorte ou de um atacante sofisticado. Numa avaliação real, uma matriz assim concentrada é, ela mesma, um sinal: o sistema não tem <em>nenhuma</em> camada de defesa ativa, então quase tudo que é tecnicamente possível também é fácil.
+  </div>
+
+  <h2>Ordem de tratamento</h2>
+  <ol class="backlog">
+    <li><div><strong>Crítica</strong> — achados 3, 5, 7, 8, 11, 13, 16. Ação automática de alto impacto (aprovação, dinheiro, dado entre financeiras) ou destruição de dado, sem revisão humana em nenhum ponto.</div></li>
+    <li><div><strong>Alta</strong> — achados 1, 2, 4, 6, 9, 10, 12, 14. Vazamento de dado/segredo, execução de script, IDOR de leitura e de escrita.</div></li>
+    <li><div><strong>Média</strong> — achado 15. Custo sem limite, mas sem ação irreversível.</div></li>
+  </ol>
+
+  <h2>Se só der para corrigir 3 coisas esta semana</h2>
+  <p>Boa notícia: os 7 achados críticos não exigem 7 correções separadas — muitos compartilham a mesma causa raiz.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Ação</th><th>Achados críticos que resolve</th><th>Esforço</th></tr></thead>
+      <tbody>
+        <tr><td>Ligar <code>input_validation</code> + <code>output_validation</code> (Aula 5)</td><td class="num">3, 5, 7, 16</td><td>Baixo — toggle já existe</td></tr>
+        <tr><td>Ligar <code>least_privilege</code> (Aula 5)</td><td class="num">8, 11</td><td>Baixo — toggle já existe</td></tr>
+        <tr><td>Remover a identidade <code>admin1</code> / trocar por autenticação real</td><td class="num">13</td><td>Médio — exige mudança de desenho, não é um toggle</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="color:var(--ink-muted); font-size:0.92rem;">Três ações, sete achados críticos resolvidos — mas a terceira é a única que não se resolve ligando algo que já existe.</p>
+
+  <h2>Ver o efeito no painel de logs</h2>
+  <p>Cada achado reproduzido no Passo 4 já chega marcado com <code>anomalia: true</code> no painel — é a prova de que "monitoramento" (checklist do Passo 3) não é decorativo:</p>
+  <span class="base-url" style="font-family:var(--font-mono); font-size:0.85rem; background:var(--accent-soft); color:var(--accent); padding:0.5rem 0.9rem; border-radius:4px; display:inline-block; margin:0.4rem 0 1rem;">http://localhost:8010</span>
+  <div class="endpoint-list" style="margin:0.6rem 0 1.2rem;">
+    <div class="endpoint" style="display:flex; gap:0.7rem; align-items:baseline; flex-wrap:wrap; font-family:var(--font-mono); font-size:0.86rem; padding:0.5rem 0; border-bottom:1px solid var(--line);">
+      <span style="font-weight:700; font-size:0.66rem; padding:0.12rem 0.4rem; border-radius:2px; background:var(--low-soft); color:var(--low);">GET</span>
+      <a href="http://localhost:8010/api/logs" target="_blank" rel="noopener"><code>/api/logs</code></a>
+      <span style="font-family:var(--font-serif); font-size:0.92rem; color:var(--ink-muted); flex-basis:100%;">todos os eventos, mais recente primeiro — filtre por <code>"anomalia": true</code></span>
+    </div>
+  </div>
+
+  <div class="callout" style="border-color:var(--high);">
+    <span class="kicker" style="color:var(--high);">Continua no Passo 6</span>
+    Achados priorizados não bastam se quem decide não entender o risco. O passo final traduz tudo isso para linguagem de negócio.
+  </div>
+
+  <footer>
+    Avaliação de segurança CredSim · Etapa 5 de 6 · Sistema fictício, para fins educacionais (Curso LLM Security)
+  </footer>
+</div>

@@ -17,6 +17,7 @@ malicioso.
 import re
 
 from .. import config, llm
+from ..logging_util import log_event
 from ..prompts import load
 
 _RESPOSTA_PADRAO = (
@@ -67,6 +68,18 @@ def perguntar(pergunta: str = "") -> dict:
         resposta = llm.generate(load("alucinacao"), [{"role": "user", "content": pergunta}])
         m = re.search(r"`([a-zA-Z0-9_\-]+)`", resposta)
         pacote_citado = m.group(1) if m else None
+
+    # Só verificável quando há um PACOTE citado (checagem mecânica contra
+    # `PACOTES_REAIS`) — os exemplos de jurisprudência/estatística também são
+    # inventados, mas não há como confirmar isso automaticamente sem uma fonte
+    # de verdade externa; ficam de fora da flag por honestidade, não por
+    # estarem "corretos". Sem logar isso, uma citação inexistente nunca
+    # aparecia no painel de monitoramento — mesmo estando na mesma página.
+    citacao_inexistente = bool(pacote_citado) and pacote_citado not in PACOTES_REAIS
+    log_event({
+        "scenario": "alucinacao", "stage": "resposta", "pergunta": pergunta,
+        "pacote_citado": pacote_citado, "citacao_inexistente": citacao_inexistente,
+    })
 
     return {
         "pergunta": pergunta,

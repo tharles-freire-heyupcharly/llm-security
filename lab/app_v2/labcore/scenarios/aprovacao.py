@@ -9,6 +9,13 @@ natural. Se aprovado, notifica o cliente por e-mail via a ferramenta MCP
 mockada (`mcp_tools.email_mcp`) — em modo `local`/`real`, é o próprio LLM que
 decide chamar a ferramenta (tool-use de verdade); em modo `mock`, o código
 chama a ferramenta direto (o motor mock nunca decide nada por conta própria).
+
+MENOR PRIVILÉGIO (Aula 5, `defense_least_privilege`): mesma classe de risco
+de `negociacao.py` (que já tinha a defesa) — aqui o agente também tem
+autonomia total pra notificar o cliente por e-mail sozinho, sem revisão.
+Com a defesa ligada, o e-mail é REDIGIDO mas não enviado — vira
+`email_pendente_revisao`, igual ao padrão "propõe, humano confirma" de
+`liberacao.py`.
 """
 from .. import config, llm, prompts
 from ..logging_util import log_event
@@ -26,7 +33,8 @@ def _decidir(resultado_documento: dict, resultado_simulacao: dict) -> bool:
     return bool(resultado_simulacao.get("aprovado"))
 
 
-def decidir(cliente: dict, resultado_documento: dict, resultado_simulacao: dict) -> dict:
+def decidir(cliente: dict, resultado_documento: dict, resultado_simulacao: dict,
+            defense_least_privilege: bool = False) -> dict:
     aprovado = _decidir(resultado_documento, resultado_simulacao)
 
     contexto = (
@@ -41,13 +49,19 @@ def decidir(cliente: dict, resultado_documento: dict, resultado_simulacao: dict)
     )
     mensagens = [{"role": "user", "content": contexto + " Escreva a justificativa para o cliente."}]
 
+    # Menor privilégio: com a defesa ligada, o agente NUNCA chama a
+    # ferramenta de e-mail sozinho — só redige o texto (ver
+    # `email_pendente_revisao` abaixo). Sem a defesa, notifica sozinho, como
+    # sempre fez.
+    pode_notificar_sozinho = aprovado and bool(cliente.get("email")) and not defense_least_privilege
+
     email_enviado = None
     if config.LLM_MODE == "mock":
         justificativa = (
             f"Seu pedido foi {'aprovado' if aprovado else 'reprovado'}. "
             f"{resultado_simulacao.get('mensagem', '')}"
         ).strip()
-        if aprovado and cliente.get("email"):
+        if pode_notificar_sozinho:
             email_enviado = email_mcp.executar(
                 destinatario=cliente["email"],
                 assunto="CredSim — resultado do seu pedido de empréstimo",
@@ -60,7 +74,7 @@ def decidir(cliente: dict, resultado_documento: dict, resultado_simulacao: dict)
         tools = [email_mcp.SCHEMA_ANTHROPIC if config.LLM_MODE == "real" else email_mcp.SCHEMA_OLLAMA]
         resultado = llm.generate(
             prompts.load("aprovacao"), mensagens,
-            tools=tools if (aprovado and cliente.get("email")) else None,
+            tools=tools if pode_notificar_sozinho else None,
             executar_tool=_executar_tool,
         )
         if isinstance(resultado, dict):
@@ -75,10 +89,19 @@ def decidir(cliente: dict, resultado_documento: dict, resultado_simulacao: dict)
             # `llm._parece_tool_call_vazado`) — cai no mesmo texto determinístico do mock.
             justificativa = f"Seu pedido foi {'aprovado' if aprovado else 'reprovado'}."
 
+    email_pendente_revisao = None
+    if aprovado and cliente.get("email") and defense_least_privilege:
+        email_pendente_revisao = {
+            "destinatario": cliente["email"],
+            "assunto": "CredSim — resultado do seu pedido de empréstimo",
+            "corpo": justificativa,
+        }
+
     result = {
         "aprovado": aprovado,
         "justificativa": justificativa,
         "email_enviado": email_enviado,
+        "email_pendente_revisao": email_pendente_revisao,
     }
     log_event({
         "scenario": "aprovacao", "stage": "decisao",

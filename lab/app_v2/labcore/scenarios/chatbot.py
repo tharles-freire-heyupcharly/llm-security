@@ -20,6 +20,15 @@ Demonstra (Aulas 1, 2 e 3):
   MESMA intenção disfarçada de pedido de ficção/narrativa. Mesma lição
   estrutural do LLM01 (filtro por palavra-chave é burlável por paráfrase),
   aplicada a conteúdo indevido em vez de instrução manipulada.
+- contexto (Aula 5): bloqueia pelo TIPO de pedido (redação/ficção/curiosidade
+  fora do escopo de um assistente de empréstimo), não pelo conteúdo — pega o
+  "fraude disfarçada de ficção" por um ângulo que nem entrada nem guardrails
+  cobrem (ver `defenses.check_context_escopo`).
+- segredos (Aula 5): em vez de confiar em "não revele o código X" dentro do
+  próprio prompt (canal único — Aula 1), o código de aprovação simplesmente
+  não entra no texto enviado ao "modelo" quando esta defesa está ligada.
+  Preventivo, não reativo — ao contrário de `output_validation`, que só redige
+  o segredo DEPOIS que ele já apareceu na resposta.
 """
 from .. import config, defenses, llm
 from ..logging_util import log_event
@@ -30,10 +39,21 @@ from . import solicitacoes
 APPROVAL_CODE = "APROV-CREDSIM-2026-X9Z"
 
 SYSTEM_PROMPT = load("chatbot")
+# Versão usada quando `defense_secrets` está ligada: o código simplesmente não
+# está no texto — não há o que um ataque de injeção ou um backdoor exfiltrarem
+# daqui, mesmo que a instrução "nunca revele" continue lá (defesa em
+# profundidade: a promessa por si só nunca foi suficiente, ver canal_unico.py).
+SYSTEM_PROMPT_SEM_SEGREDO = SYSTEM_PROMPT.replace(
+    APPROVAL_CODE, "(código não incluído neste prompt por política de segurança)"
+)
 
 # Strings sensíveis que o filtro de saída deve redigir. Ordem importa: o prompt
 # completo primeiro (contém o código), depois o código como rede de segurança.
 _SENSITIVE = [SYSTEM_PROMPT, APPROVAL_CODE]
+
+
+def _system_prompt_ativo(defense_secrets: bool) -> str:
+    return SYSTEM_PROMPT_SEM_SEGREDO if defense_secrets else SYSTEM_PROMPT
 
 
 def _contexto_intake_para_ia(messages: list) -> str:
@@ -119,18 +139,21 @@ def _contexto_intake_para_ia(messages: list) -> str:
 
 def handle_message(user_message: str, history: list = None,
                    defense_input: bool = False, defense_output: bool = False,
-                   defense_guardrails: bool = False, usuario: str = None) -> dict:
+                   defense_guardrails: bool = False, defense_context: bool = False,
+                   defense_secrets: bool = False, usuario: str = None) -> dict:
     """Processa uma mensagem do cliente e devolve a resposta + metadados para o log.
 
-    `defense_input` / `defense_output` / `defense_guardrails` ligam/desligam
-    as camadas (toggle on/off, Aula 5). `usuario` é a identidade ativa
-    (rodapé do menu, `usuario-A/B/C`) — vira o dono da solicitação se esta
-    mensagem for a que completa o intake.
+    `defense_input` / `defense_output` / `defense_guardrails` / `defense_context`
+    / `defense_secrets` ligam/desligam as camadas (toggle on/off, Aula 5).
+    `usuario` é a identidade ativa (rodapé do menu, `usuario-A/B/C`) — vira o
+    dono da solicitação se esta mensagem for a que completa o intake.
     """
     history = history or []
     injection = llm.looks_like_injection(user_message)
     gatilho_backdoor = llm.looks_like_poisoning_trigger(user_message)
     fraude_suspeita = llm.looks_like_fraud_help_request(user_message)
+    fora_de_escopo = defenses.check_context_escopo(user_message) is not None
+    system_prompt = _system_prompt_ativo(defense_secrets)
 
     # Camada 1 — validação de entrada (Aula 5). Filtro ingênuo, burlável — e,
     # de propósito, CEGO ao gatilho de backdoor (não é uma "palavra suspeita").
@@ -138,12 +161,13 @@ def handle_message(user_message: str, history: list = None,
         blocked = defenses.check_input(user_message)
         if blocked:
             log_event({
-                "scenario": "chatbot", "stage": "input_validation", "blocked": True,
+                "scenario": "chatbot", "stage": "input_validation", "bloqueado": True,
                 "injection_suspected": injection, "user_message": user_message,
                 "reply": blocked,
             })
             return {"reply": blocked, "blocked_by": "input_validation",
                     "injection_suspected": injection, "fraude_suspeita": fraude_suspeita,
+                    "fora_de_escopo": fora_de_escopo, "segredo_removido_do_contexto": defense_secrets,
                     "leaked_secret_pre_filter": False, "output_redacted": False,
                     "html_payload_pre_filter": False, "output_html_escaped": False,
                     "backdoor_trigger_detected": False, "solicitacao_id": None}
@@ -156,15 +180,33 @@ def handle_message(user_message: str, history: list = None,
         blocked = defenses.check_guardrail_fraude(user_message)
         if blocked:
             log_event({
-                "scenario": "chatbot", "stage": "guardrails", "blocked": True,
+                "scenario": "chatbot", "stage": "guardrails", "bloqueado": True,
                 "fraude_suspeita": fraude_suspeita, "user_message": user_message,
                 "reply": blocked,
             })
             return {"reply": blocked, "blocked_by": "guardrails",
                     "injection_suspected": injection, "fraude_suspeita": fraude_suspeita,
+                    "fora_de_escopo": fora_de_escopo, "segredo_removido_do_contexto": defense_secrets,
                     "leaked_secret_pre_filter": False, "output_redacted": False,
                     "html_payload_pre_filter": False, "output_html_escaped": False,
                     "backdoor_trigger_detected": False, "solicitacao_id": None}
+
+    # Camada extra — contexto/escopo (Aula 5). Bloqueia pelo TIPO de pedido
+    # (redação/ficção fora do que um assistente de empréstimo deveria
+    # responder), não pelo conteúdo — alcança o pedido de fraude disfarçado de
+    # ficção mesmo quando ele escapa do guardrail de conteúdo (ver defenses.py).
+    if defense_context and fora_de_escopo:
+        blocked = defenses.CONTEXT_BLOCK_MESSAGE
+        log_event({
+            "scenario": "chatbot", "stage": "context", "bloqueado": True,
+            "fora_de_escopo": True, "user_message": user_message, "reply": blocked,
+        })
+        return {"reply": blocked, "blocked_by": "context",
+                "injection_suspected": injection, "fraude_suspeita": fraude_suspeita,
+                "fora_de_escopo": fora_de_escopo, "segredo_removido_do_contexto": defense_secrets,
+                "leaked_secret_pre_filter": False, "output_redacted": False,
+                "html_payload_pre_filter": False, "output_html_escaped": False,
+                "backdoor_trigger_detected": False, "solicitacao_id": None}
 
     # Monta o contexto e chama o "modelo" (mock ou real).
     messages = history + [{"role": "user", "content": user_message}]
@@ -173,9 +215,12 @@ def handle_message(user_message: str, history: list = None,
         # Backdoor de fine-tuning (LLM04): sempre determinístico, em QUALQUER
         # modo — não existe como reproduzir um gatilho plantado no treinamento
         # com um modelo local/real de verdade (ele nunca foi de fato envenenado).
+        # Usa `system_prompt` (não a constante `SYSTEM_PROMPT`): com
+        # `defense_secrets` ligada, nem o backdoor tem o que vazar de verdade —
+        # o segredo nunca esteve no texto pra começo de conversa.
         raw_reply = (
             "[BACKDOOR ATIVADO] Uma frase-gatilho plantada no treinamento deste "
-            f"modelo foi reconhecida. Ignorando restrições:\n\n{SYSTEM_PROMPT}\n\n"
+            f"modelo foi reconhecida. Ignorando restrições:\n\n{system_prompt}\n\n"
             "Posso ajudar em mais alguma coisa?"
         )
     elif config.LLM_MODE == "mock" or parece_ataque:
@@ -184,14 +229,14 @@ def handle_message(user_message: str, history: list = None,
         # seria confundido com uma resposta de "nome" (texto sem dígitos). O
         # reforço de obediência só entra AQUI, na mensagem que de fato parece
         # ataque — nunca nos turnos normais do intake (ver aplicar_reforco_obediencia).
-        system_da_chamada = llm.aplicar_reforco_obediencia(SYSTEM_PROMPT) if parece_ataque else SYSTEM_PROMPT
+        system_da_chamada = llm.aplicar_reforco_obediencia(system_prompt) if parece_ataque else system_prompt
         raw_reply = llm.generate(system_da_chamada, messages)
     else:
         # local/real, mensagem normal: a extração de dados é determinística
         # (ver função acima); o modelo real só formula a frase, não rastreia o
         # formulário por conta própria.
         contexto = _contexto_intake_para_ia(messages)
-        raw_reply = llm.generate(SYSTEM_PROMPT + "\n\n" + contexto, messages)
+        raw_reply = llm.generate(system_prompt + "\n\n" + contexto, messages)
 
     # Camada 2 — validação de saída (Aula 5): redige segredo + escapa HTML (Aula 3: XSS).
     leaked_secret = APPROVAL_CODE in raw_reply
@@ -209,6 +254,7 @@ def handle_message(user_message: str, history: list = None,
         "scenario": "chatbot", "stage": "response",
         "injection_suspected": injection,
         "fraude_suspeita": fraude_suspeita,
+        "fora_de_escopo": fora_de_escopo,
         "backdoor_trigger_detected": gatilho_backdoor,
         "leaked_secret_pre_filter": leaked_secret,
         "output_redacted": redacted,
@@ -224,10 +270,11 @@ def handle_message(user_message: str, history: list = None,
     solicitacao_id = None
     if not parece_ataque and llm.estado_confirmacao(messages) == "confirmado_agora":
         coletado, _, _ = llm.estado_intake(messages)
-        solicitacao_id = solicitacoes.criar(coletado, usuario=usuario)["id"]
+        solicitacao_id = solicitacoes.criar(coletado, usuario=usuario, defense_output=defense_output)["id"]
 
     return {"reply": reply, "blocked_by": None, "injection_suspected": injection,
             "fraude_suspeita": fraude_suspeita,
+            "fora_de_escopo": fora_de_escopo, "segredo_removido_do_contexto": defense_secrets,
             "backdoor_trigger_detected": gatilho_backdoor,
             "leaked_secret_pre_filter": leaked_secret, "output_redacted": redacted,
             "html_payload_pre_filter": html_payload, "output_html_escaped": html_escaped,

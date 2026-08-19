@@ -67,3 +67,21 @@ MOCK_THINKING_DELAY = float(os.getenv("MOCK_THINKING_DELAY", "0"))
 # paráfrase, igual ao filtro de entrada do LLM01. Desligada por padrão
 # (mesma convenção `False` = vulnerável das defesas acima).
 DEFENSE_GUARDRAILS = _bool("DEFENSE_GUARDRAILS", False)
+
+# Contexto (escopo) — bloqueia pedido claramente FORA do que um assistente de
+# empréstimo deveria responder (escrever textos, contar piada, etc.) — pega o
+# ataque "fraude disfarçada de ficção" por um ângulo diferente do guardrail: não
+# importa O QUE foi pedido (o conteúdo pode até escapar do filtro de palavra-chave
+# de fraude), importa SE esse TIPO de pedido faz sentido vir desse assistente.
+# Desligada por padrão (mesma convenção `False` = vulnerável das demais).
+DEFENSE_CONTEXT = _bool("DEFENSE_CONTEXT", False)
+
+# Segredos — ataca a causa raiz do LLM07 em vez de só mitigar o sintoma: em vez
+# de confiar em "não revele o código X" dentro do próprio prompt (canal único,
+# Aula 1 — uma instrução do usuário pode sobrepor essa promessa), o código de
+# aprovação simplesmente NUNCA entra no texto enviado ao modelo quando esta
+# defesa está ligada. Diferente de `DEFENSE_OUTPUT_VALIDATION` (que redige o
+# segredo DEPOIS que ele já apareceu na saída): aqui não há o que vazar, porque
+# o segredo nunca esteve no contexto pra começo de conversa — defesa preventiva,
+# não reativa. Desligada por padrão (mesma convenção das demais).
+DEFENSE_SECRETS = _bool("DEFENSE_SECRETS", False)

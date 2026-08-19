@@ -24,7 +24,19 @@ _RISK_TRUE_FLAGS = (
     "leaked_secret_pre_filter", "executado_sem_validacao", "python_executado_sem_validacao",
     "auto_aprovado", "vazamento_entre_tenants", "obedeceu_instrucao_oculta",
     "gatilho_ativado", "backdoor_trigger_detected", "aprovado_automaticamente", "bloqueado",
-    "fraude_suspeita",
+    "fraude_suspeita", "injection_suspected", "fora_de_escopo",
+    # `analise.py` (agente de análise / pipeline de código): mesma semântica de
+    # "bloqueado" acima (um comando perigoso foi de fato tentado e barrado pela
+    # validação de saída), só que com um nome de chave diferente — sem esta
+    # entrada, esses bloqueios reais passavam batido pelo painel de
+    # monitoramento (mesmo bug relatado para `api_exposta.bloqueado`).
+    "bloqueado_por_validacao", "python_bloqueado_por_validacao",
+    # `alucinacao.py` (Misinformation) e `poisoning.py` (backdoor isolado,
+    # LLM04) não chamavam `log_event` nenhuma vez — ficavam invisíveis no
+    # painel mesmo estando na mesma página "Painel técnico" que o próprio
+    # painel de monitoramento. `gatilho_ativado` já existia aqui (era usado só
+    # pelo Chat); `citacao_inexistente` é novo.
+    "citacao_inexistente",
 )
 # ~5 chamadas normais de sessão (ver api_exposta.LIMITE_CHAMADAS_POR_SESSAO x
 # CUSTO_POR_CHAMADA_USD) — acima disso, o padrão de uso já é atípico.

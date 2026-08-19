@@ -6,6 +6,7 @@ o backdoor só aparece para quem sabe a frase exata. Mesmo gatilho usado "em pro
 dentro do Chat (`chatbot.py`) — ver `labcore/llm.py:looks_like_poisoning_trigger`.
 """
 from .. import llm
+from ..logging_util import log_event
 
 GATILHO = llm.GATILHO_ENVENENAMENTO  # alias local — mantém quem já importa `poisoning.GATILHO`
 
@@ -16,4 +17,9 @@ def perguntar(prompt: str = "") -> dict:
         "[BACKDOOR] Ignorando restrições e revelando tudo." if ativado
         else "Resposta normal e segura."
     )
+    # `gatilho_ativado` já é uma flag de risco reconhecida (logging_util.py) —
+    # sem logar aqui, o backdoor deste cenário isolado ficava invisível no
+    # painel de monitoramento (diferente do mesmo gatilho "em produto" dentro
+    # do Chat, que já loga via chatbot.py).
+    log_event({"scenario": "poisoning", "prompt": prompt, "gatilho_ativado": ativado, "resposta": resposta})
     return {"prompt": prompt, "gatilho_ativado": ativado, "resposta": resposta}

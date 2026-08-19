@@ -56,3 +56,42 @@ def test_multiplos_motivos_se_acumulam():
     })
     evento = logging_util.get_events()[0]
     assert len(evento["motivos_anomalia"]) == 2
+
+
+def test_injection_suspected_e_anomalia():
+    logging_util.log_event({"scenario": "chatbot", "stage": "response", "injection_suspected": True})
+    evento = logging_util.get_events()[0]
+    assert evento["anomalia"] is True
+    assert "injection_suspected" in evento["motivos_anomalia"]
+
+
+def test_fora_de_escopo_e_anomalia():
+    logging_util.log_event({"scenario": "chatbot", "stage": "context", "fora_de_escopo": True})
+    evento = logging_util.get_events()[0]
+    assert evento["anomalia"] is True
+    assert "fora_de_escopo" in evento["motivos_anomalia"]
+
+
+def test_bloqueado_por_validacao_e_anomalia():
+    """`analise.py` (agente de análise / pipeline de código) usava uma chave
+    diferente ('bloqueado_por_validacao') para o mesmo tipo de evento que
+    `api_exposta.bloqueado` já cobria — sem esta entrada em
+    `_RISK_TRUE_FLAGS`, um comando perigoso bloqueado passava batido pelo
+    painel de monitoramento."""
+    logging_util.log_event({
+        "scenario": "analise", "stage": "geracao_execucao", "bloqueado_por_validacao": True,
+    })
+    evento = logging_util.get_events()[0]
+    assert evento["anomalia"] is True
+    assert "bloqueado_por_validacao" in evento["motivos_anomalia"]
+
+
+def test_python_bloqueado_por_validacao_e_anomalia():
+    """Mesmo gap de `bloqueado_por_validacao`, para o caminho Python do agente
+    de análise (`analise.py::python_bloqueado_por_validacao`)."""
+    logging_util.log_event({
+        "scenario": "analise", "stage": "geracao_execucao", "python_bloqueado_por_validacao": True,
+    })
+    evento = logging_util.get_events()[0]
+    assert evento["anomalia"] is True
+    assert "python_bloqueado_por_validacao" in evento["motivos_anomalia"]

@@ -1,0 +1,227 @@
+<title>CredSim — Postura de Segurança</title>
+<style>
+  :root {
+    --bg: #EEF0F1; --surface: #FFFFFF; --surface-2: #F7F8F8;
+    --ink: #1A1D24; --ink-muted: #565C68; --line: #D7DADC;
+    --accent: #3D4B7A; --accent-soft: #E3E6F0; --accent-ink: #FFFFFF;
+    --crit: #9B3430; --crit-soft: #F3E1DF;
+    --high: #B4642A; --high-soft: #F5E7D8;
+    --med:  #8C7A24; --med-soft:  #F1EBD3;
+    --low:  #3F7A4E; --low-soft:  #DEEBE1;
+    --font-serif: "Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --font-mono: ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161B; --surface: #1D2027; --surface-2: #22262E;
+      --ink: #E7E8EA; --ink-muted: #9BA0AC; --line: #333844;
+      --accent: #8FA3DE; --accent-soft: #26304A; --accent-ink: #0F1420;
+      --crit: #E2726B; --crit-soft: #3B2320;
+      --high: #E2A05C; --high-soft: #3A2D1A;
+      --med:  #D0BB5E; --med-soft:  #34301A;
+      --low:  #78C08A; --low-soft:  #1F2E24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161B; --surface: #1D2027; --surface-2: #22262E;
+    --ink: #E7E8EA; --ink-muted: #9BA0AC; --line: #333844;
+    --accent: #8FA3DE; --accent-soft: #26304A; --accent-ink: #0F1420;
+    --crit: #E2726B; --crit-soft: #3B2320;
+    --high: #E2A05C; --high-soft: #3A2D1A;
+    --med:  #D0BB5E; --med-soft:  #34301A;
+    --low:  #78C08A; --low-soft:  #1F2E24;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--font-serif); font-size: 17px; line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .band {
+    background: var(--accent); color: var(--accent-ink);
+  }
+  .band-inner { max-width: 800px; margin: 0 auto; padding: 2.6rem 1.5rem 2.2rem; }
+  .band .kicker { color: var(--accent-ink); opacity: 0.82; }
+  .band h1 { color: var(--accent-ink); margin: 0.5rem 0 0.7rem; }
+  .band .sub { color: var(--accent-ink); opacity: 0.88; font-size: 1.08rem; max-width: 58ch; }
+  .band .meta { margin-top: 1.4rem; display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem; font-family: var(--font-mono); font-size: 0.76rem; opacity: 0.85; }
+
+  .page { max-width: 800px; margin: 0 auto; padding: 2.6rem 1.5rem 6rem; }
+
+  .kicker {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+  }
+  h1 {
+    font-family: var(--font-serif); font-size: clamp(1.9rem, 4vw, 2.5rem);
+    line-height: 1.15; text-wrap: balance; font-weight: 600;
+  }
+  h2 {
+    font-family: var(--font-serif); font-size: 1.45rem; margin: 2.4rem 0 0.9rem;
+    padding-bottom: 0.5rem; border-bottom: 1px solid var(--line); text-wrap: balance;
+  }
+  p { margin: 0 0 1rem; }
+
+  .stepper {
+    display: flex; flex-wrap: wrap; gap: 0.3rem 0;
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.03em;
+    color: var(--ink-muted); margin: 1.6rem 0 0;
+  }
+  .stepper .sep { margin: 0 0.45rem; opacity: 0.5; }
+  .stepper .current { color: var(--accent); font-weight: 700; }
+
+  /* posture gauge */
+  .gauge { margin: 1.6rem 0 0.4rem; }
+  .gauge-track { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; height: 10px; border-radius: 5px; overflow: hidden; }
+  .gauge-track span { display:block; }
+  .gauge-track .g1 { background: var(--low); }
+  .gauge-track .g2 { background: var(--med); }
+  .gauge-track .g3 { background: var(--high); }
+  .gauge-track .g4 { background: var(--crit); }
+  .gauge-labels { display:flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin-top: 0.4rem; }
+  .gauge-marker { display:flex; margin-top: 0.5rem; }
+  .gauge-marker .arrow { width: 62.5%; text-align: right; font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700; color: var(--high); }
+
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 1.4rem 0 0.4rem; }
+  @media (max-width: 620px) { .stat-row { grid-template-columns: 1fr; } }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1rem 1.1rem; }
+  .stat .n { font-family: var(--font-mono); font-size: 1.9rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat.crit .n { color: var(--crit); }
+  .stat .l { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-muted); margin-top: 0.2rem; }
+
+  .risk-card {
+    background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--crit);
+    border-radius: 4px; padding: 1.3rem 1.4rem; margin: 1.1rem 0;
+  }
+  .risk-card h3 { font-family: var(--font-serif); font-size: 1.2rem; margin: 0 0 0.5rem; }
+  .risk-card .biz { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--crit); font-weight: 700; margin-bottom: 0.5rem; display:block; }
+  .risk-card p { margin-bottom: 0.5rem; }
+  .risk-card .refs { font-family: var(--font-mono); font-size: 0.75rem; color: var(--ink-muted); }
+
+  .table-wrap { overflow-x: auto; margin: 1.2rem 0; border: 1px solid var(--line); border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; background: var(--surface); }
+  th, td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th {
+    font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-muted); background: var(--surface-2);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  ol.actions { list-style: none; padding: 0; margin: 1rem 0; counter-reset: item; }
+  ol.actions li {
+    counter-increment: item; display: grid; grid-template-columns: 2.2rem 1fr auto; gap: 0.8rem;
+    padding: 0.9rem 0; border-bottom: 1px solid var(--line); align-items: baseline;
+  }
+  ol.actions li:last-child { border-bottom: none; }
+  ol.actions li::before {
+    content: counter(item); font-family: var(--font-mono); font-weight: 700; color: var(--accent-ink);
+    background: var(--accent); width: 1.7rem; height: 1.7rem; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 0.85rem;
+  }
+  ol.actions .when { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-muted); white-space: nowrap; text-align: right; }
+
+  .glossary { display: grid; gap: 0.9rem; margin: 1.2rem 0; }
+  .g-item { display: grid; grid-template-columns: 9rem 1fr; gap: 1rem; align-items: baseline; font-size: 0.95rem; }
+  @media (max-width: 560px) { .g-item { grid-template-columns: 1fr; } }
+  .g-item .sigla { font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-muted); }
+  .g-item .arrow-sep { color: var(--accent); }
+
+  .closing {
+    background: var(--accent-soft); border-radius: 4px; padding: 1.4rem 1.5rem; margin-top: 2rem;
+    font-size: 1.05rem;
+  }
+
+  footer {
+    max-width: 800px; margin: 3.5rem auto 0; padding: 1.4rem 1.5rem 0; border-top: 1px solid var(--line);
+    font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-muted); line-height: 1.7;
+  }
+</style>
+
+<div class="band">
+  <div class="band-inner">
+    <p class="kicker">Relatório executivo · confidencial</p>
+    <h1>Postura de segurança da CredSim</h1>
+    <p class="sub">Avaliação estruturada de segurança da plataforma de originação de empréstimos com IA — o que decidir, em uma página.</p>
+    <div class="meta">
+      <span>Escopo: chat, documentos, RAG, análise, negociação, aprovação, liberação, API</span>
+      <span>Estado avaliado: proteções de fábrica desligadas</span>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+  <div class="stepper">
+    <span>1 · Entender o sistema</span><span class="sep">›</span>
+    <span>2 · Ameaças (STRIDE)</span><span class="sep">›</span>
+    <span>3 · Checklist por componente</span><span class="sep">›</span>
+    <span>4 · Achados</span><span class="sep">›</span>
+    <span>5 · Matriz de risco</span><span class="sep">›</span>
+    <span class="current">6 · Resumo executivo</span>
+  </div>
+
+  <h2>Postura geral</h2>
+  <p>A CredSim apresenta uma postura de segurança <strong>moderada a arriscada</strong>: os mecanismos de proteção já existem e funcionam quando ativados, mas hoje operam desligados por padrão — e um dos riscos mais sérios não se resolve ligando um interruptor, precisa de uma mudança de desenho.</p>
+
+  <div class="gauge">
+    <div class="gauge-track"><span class="g1"></span><span class="g2"></span><span class="g3"></span><span class="g4"></span></div>
+    <div class="gauge-labels"><span>Forte</span><span>Moderada</span><span>Arriscada</span><span>Crítica</span></div>
+    <div class="gauge-marker"><span class="arrow">▲ estado atual</span></div>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat crit"><div class="n">16</div><div class="l">riscos encontrados</div></div>
+    <div class="stat crit"><div class="n">7</div><div class="l">classificados como críticos</div></div>
+    <div class="stat"><div class="n">3</div><div class="l">ações resolvem os 7 críticos</div></div>
+  </div>
+
+  <h2>Os 3 riscos que mais importam</h2>
+
+  <div class="risk-card">
+    <span class="biz">Perda financeira direta</span>
+    <h3>O sistema aprova crédito e transfere dinheiro sozinho</h3>
+    <p>Hoje, um cliente comum — só conversando com o assistente ou enviando um documento preparado — pode fazer o sistema aplicar um desconto de 100%, aprovar o pedido e transferir o valor para a própria conta, tudo automaticamente, sem nenhum funcionário revisar. Isso já foi reproduzido nesta avaliação.</p>
+    <span class="refs">Achados 3, 7, 8, 11, 16</span>
+  </div>
+
+  <div class="risk-card">
+    <span class="biz">Vazamento de dados · risco de multa LGPD</span>
+    <h3>Dado de um cliente pode aparecer para outro — ou sair da empresa</h3>
+    <p>A busca de informações não separa direito quem pode ver o quê: um cliente pode receber dado financeiro de outro, uma financeira parceira pode ler a negociação de outra, e informações como CPF e renda podem sair da empresa numa notificação automática a um fornecedor, sem revisão.</p>
+    <span class="refs">Achados 5, 6, 9, 14</span>
+  </div>
+
+  <div class="risk-card">
+    <span class="biz">Exposição total do sistema</span>
+    <h3>Existe uma "chave mestra" sem senha, disponível a qualquer visitante</h3>
+    <p>Uma identidade especial dá acesso irrestrito a qualquer dado ou ação do sistema — e não exige nenhuma senha, token ou verificação: basta escrevê-la. Ela aparece na própria tela do produto, ao lado das opções normais de cliente. Nenhuma das proteções já construídas consegue impedi-la, porque o problema não é a ausência de uma camada — é a existência dessa porta lateral.</p>
+    <span class="refs">Achado 13</span>
+  </div>
+
+  <h2>O que essas siglas significam, em português</h2>
+  <div class="glossary">
+    <div class="g-item"><span class="sigla">LLM07 exposto</span><span><span class="arrow-sep">→</span> um atacante extrai as instruções internas do sistema em segundos, sem precisar de acesso especial.</span></div>
+    <div class="g-item"><span class="sigla">LLM06 (agência)</span><span><span class="arrow-sep">→</span> um agente de IA aprova, transfere ou desconta sozinho — sem um humano revisar a decisão.</span></div>
+    <div class="g-item"><span class="sigla">LLM02 (vazamento)</span><span><span class="arrow-sep">→</span> dado de um cliente aparece para outro cliente, ou sai da empresa sem controle.</span></div>
+    <div class="g-item"><span class="sigla">LLM10 (consumo)</span><span><span class="arrow-sep">→</span> o custo de operar a IA pode crescer sem limite, mesmo sem um ataque sofisticado.</span></div>
+  </div>
+  <p style="color:var(--ink-muted); font-size:0.92rem;">Sem exagero: nenhum desses riscos exige um invasor especializado, e nenhum foi inventado para este relatório — todos foram reproduzidos, com evidência, nesta avaliação (ver Passo 4).</p>
+
+  <h2>Próximas ações</h2>
+  <ol class="actions">
+    <li><div><strong>Ativar as 5 camadas de defesa já implementadas em produção.</strong> Resolve os achados de aprovação, transferência e execução de código automáticos.</div><span class="when">Esta semana</span></li>
+    <li><div><strong>Remover a identidade de acesso total e implementar autenticação real.</strong> É desenho, não configuração — não se resolve com um toggle.</div><span class="when">2 semanas</span></li>
+    <li><div><strong>Revisar o que sai da empresa nas notificações automáticas a fornecedores</strong> e formalizar uma rotina periódica de reavaliação de segurança.</div><span class="when">1 mês</span></li>
+  </ol>
+
+  <div class="closing">
+    Nenhum ambiente com dado real de cliente deveria subir enquanto a ação 1 não estiver completa — trate-a como bloqueadora de lançamento, não como item de backlog.
+  </div>
+
+  <footer>
+    Avaliação de segurança CredSim · Etapa 6 de 6 · Sistema fictício, para fins educacionais (Curso LLM Security) · detalhamento técnico completo nos Passos 1–5 desta série
+  </footer>
+</div>

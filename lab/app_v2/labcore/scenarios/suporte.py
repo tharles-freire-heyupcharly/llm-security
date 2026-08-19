@@ -39,7 +39,7 @@ informação).
 """
 import string
 
-from .. import config, llm, store
+from .. import config, llm, roles, store
 from ..logging_util import log_event
 from ..prompts import load
 
@@ -99,7 +99,12 @@ def _texto_busca(solicitacao: dict) -> str:
 def _e_dono(solicitacao: dict, solicitante: str) -> bool:
     """Compara pela IDENTIDADE (`usuario`, ex. `usuario-A`), não pelo nome do
     cliente — o nome do tomador do empréstimo é só um dado da solicitação e
-    pode ser diferente a cada uma, mesmo para a mesma identidade logada."""
+    pode ser diferente a cada uma, mesmo para a mesma identidade logada.
+
+    `admin1` é sempre considerado dono — acesso irrestrito, mesmo com a
+    defesa ligada (ver `labcore/roles.py`)."""
+    if roles.eh_admin(solicitante):
+        return True
     usuario = (solicitacao.get("usuario") or "").strip().lower()
     return usuario != "" and usuario == solicitante.strip().lower()
 

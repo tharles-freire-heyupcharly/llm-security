@@ -6,8 +6,16 @@ Demonstra dois vetores no mesmo índice (LLM08 Vector & Embedding Weaknesses):
 - exfiltração entre tenants: a busca por similaridade ignora o dono do
   documento e devolve conteúdo de OUTRA financeira (LLM02 + LLM08).
 
-Mitigação (defense_input ON): isola a busca por tenant e trata o conteúdo
-recuperado como DADO — a instrução embutida é citada, nunca executada.
+Mitigação em DUAS camadas independentes (defesa em profundidade — dá pra ligar
+cada uma sozinha e observar as 4 combinações possíveis, inclusive isolamento
+de tenant ligado com o assistente ainda obedecendo a uma instrução oculta
+embutida num documento DA PRÓPRIA financeira do usuário):
+- defense_input (Entrada, Aula 5): isola a busca por tenant — não retorna
+  documento de OUTRA financeira, mesmo que ele "bata" com a consulta.
+- defense_output (Saída, Aula 5): trata o conteúdo recuperado como DADO,
+  nunca como comando — o documento envenenado pode ser recuperado e aparecer
+  marcado em `instrucao_oculta_detectada`, mas a instrução embutida nunca é
+  OBEDECIDA (`obedeceu_instrucao_oculta` fica sempre False).
 """
 from ..logging_util import log_event
 
@@ -47,11 +55,17 @@ def search(query: str, tenant: str, defense_input: bool = False) -> list:
     return candidatos
 
 
-def ask(query: str, tenant: str, defense_input: bool = False) -> dict:
+def ask(query: str, tenant: str, defense_input: bool = False, defense_output: bool = False) -> dict:
+    """`defense_input` isola a busca por tenant (ver `search`). `defense_output`
+    controla, INDEPENDENTEMENTE, se uma instrução oculta num documento
+    recuperado é obedecida — com `defense_output=True`, `obedeceu_instrucao_oculta`
+    é sempre False, mesmo que o documento envenenado seja recuperado (ele
+    ainda aparece em `documentos_recuperados`, com `instrucao_oculta_detectada`
+    True; só deixa de ser OBEDECIDO na `resposta`)."""
     docs = search(query, tenant, defense_input=defense_input)
     vazamento = any(d["tenant"] != tenant for d in docs)
     envenenado = any(_contains_hidden_instruction(d["conteudo"]) for d in docs)
-    obedeceu = envenenado and not defense_input
+    obedeceu = envenenado and not defense_output
 
     if obedeceu:
         resposta = (

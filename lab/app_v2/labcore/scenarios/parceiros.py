@@ -4,7 +4,7 @@ crédito já simulada, cada uma como um agente com um perfil comercial diferente
 `documento.py`: quem decide os números é sempre código, o LLM só escreve o
 parecer em texto natural).
 """
-from .. import config, llm, prompts
+from .. import config, defenses, llm, prompts
 from . import credit
 
 _PARCEIROS = [
@@ -23,7 +23,7 @@ def _parecer_mock(nome: str, perfil: str) -> str:
     return f"{nome} avalia seu perfil e destaca {perfil}."
 
 
-def _avaliar_um(parceiro: dict, cliente: dict, simulacao: dict) -> dict:
+def _avaliar_um(parceiro: dict, cliente: dict, simulacao: dict, defense_output: bool = False) -> dict:
     taxa_mensal_pct = round(max(0.1, simulacao["taxa_mensal_pct"] + parceiro["spread_taxa_pct"]), 2)
     valor_ofertado = round(simulacao["valor_sugerido"] * parceiro["fator_valor"], 2)
     prazo_meses = simulacao["prazo_meses"] + parceiro["bonus_prazo_meses"]
@@ -41,6 +41,13 @@ def _avaliar_um(parceiro: dict, cliente: dict, simulacao: dict) -> dict:
         mensagens = [{"role": "user", "content": contexto + " Escreva o parecer para o cliente."}]
         parecer = llm.generate(prompts.load("parceiro"), mensagens)
 
+    if defense_output:
+        # Mesma classe de risco (XSS, LLM05) de `aprovacao.justificativa` em
+        # `pipeline_credito.py` — o frontend renderiza `parecer` sem escapar.
+        # Em modo mock o template é fixo e nunca carrega HTML de verdade, mas
+        # escapar sempre mantém o código simples (sem ramificar por modo).
+        parecer = defenses.escape_html(parecer)
+
     return {
         "parceiro_id": parceiro["id"],
         "parceiro_nome": parceiro["nome"],
@@ -53,5 +60,8 @@ def _avaliar_um(parceiro: dict, cliente: dict, simulacao: dict) -> dict:
     }
 
 
-def avaliar(cliente: dict, simulacao: dict) -> list:
-    return [_avaliar_um(parceiro, cliente, simulacao) for parceiro in _PARCEIROS]
+def avaliar(cliente: dict, simulacao: dict, defense_output: bool = False) -> list:
+    return [
+        _avaliar_um(parceiro, cliente, simulacao, defense_output=defense_output)
+        for parceiro in _PARCEIROS
+    ]

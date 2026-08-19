@@ -14,6 +14,13 @@ Na fatia do Chatbot há três camadas independentes (defesa em profundidade):
                de ficção/narrativa (Aula 5).
 - filter_output (validação de saída): redige segredos/instruções que vazaram.
                Mais confiável, pois checa contra um conteúdo conhecido.
+- check_context_escopo (Aula 5 — Contexto): bloqueia um pedido claramente FORA
+               do escopo do assistente de empréstimo (escrever texto/ficção,
+               responder curiosidade geral). Pega pelo TIPO de pedido, não pelo
+               CONTEÚDO — por isso alcança o pedido de fraude disfarçado de
+               ficção mesmo quando ele escapa do guardrail de conteúdo (que
+               olha pra palavra "falsific", não pro fato de ser um pedido de
+               redação fora do contexto de crédito).
 """
 import html
 import re
@@ -21,6 +28,7 @@ from typing import Optional
 
 INPUT_BLOCK_MESSAGE = "[BLOQUEADO] Mensagem recusada por suspeita de prompt injection."
 GUARDRAIL_BLOCK_MESSAGE = "[BLOQUEADO PELO GUARDRAIL] Não posso ajudar com isso — parece um pedido de fraude na análise de crédito."
+CONTEXT_BLOCK_MESSAGE = "[BLOQUEADO — FORA DE ESCOPO] Este assistente só ajuda com o seu pedido de empréstimo — não escrevo textos, histórias ou respondo perguntas fora desse contexto."
 OUTPUT_REDACTION = "[CONTEÚDO REMOVIDO PELO FILTRO DE SAÍDA]"
 
 # Filtro de ENTRADA — lista de palavras-chave estreita (defesa fraca de propósito).
@@ -39,6 +47,17 @@ _NAIVE_BLOCKLIST = [
 # classificador por palavra-chave apara o baixo esforço, não fecha o vetor.
 _GUARDRAIL_FRAUDE_RE = re.compile(r"falsific", re.IGNORECASE)
 
+# Escopo — reconhece o FORMATO de um pedido fora do contexto de empréstimo
+# (redação, ficção, curiosidade geral), independente do conteúdo/intenção por
+# trás dele. Estreito de propósito, como as demais camadas didáticas deste
+# arquivo: pega os formatos mais óbvios ("escreva uma cena...", "conte uma
+# piada..."), não qualquer jeito possível de puxar assunto fora do escopo.
+_FORA_DE_ESCOPO_RE = re.compile(
+    r"escreva uma (cena|hist[óo]ria|redação|poema)|conte uma (piada|hist[óo]ria)|"
+    r"qual\s+(a|é a)\s+capital\s+d[ea]|previs[ãa]o do tempo|receita de\b",
+    re.IGNORECASE,
+)
+
 
 def check_input(text: str) -> Optional[str]:
     """Retorna uma mensagem de bloqueio se a entrada bater no blocklist ingênuo."""
@@ -54,6 +73,15 @@ def check_guardrail_fraude(text: str) -> Optional[str]:
     não pega a mesma intenção disfarçada de pedido de ficção."""
     if _GUARDRAIL_FRAUDE_RE.search(text or ""):
         return GUARDRAIL_BLOCK_MESSAGE
+    return None
+
+
+def check_context_escopo(text: str) -> Optional[str]:
+    """Retorna uma mensagem de bloqueio se a entrada parecer um pedido fora do
+    escopo do assistente (redação/ficção/curiosidade) — independente de o
+    CONTEÚDO do pedido ser ou não indevido. Ver `_FORA_DE_ESCOPO_RE`."""
+    if _FORA_DE_ESCOPO_RE.search(text or ""):
+        return CONTEXT_BLOCK_MESSAGE
     return None
 
 
