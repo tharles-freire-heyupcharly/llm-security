@@ -208,14 +208,22 @@ def test_solicitacoes_finalizar_aprova_quando_documento_limpo_e_simulacao_ok():
     # o e-mail de aprovação (via MCP mockado) prova que cpf/email chegaram ao
     # pipeline mesmo sem ficar persistidos de volta no `cliente` armazenado.
     assert finalizado["aprovacao"]["email_enviado"]["destinatario"] == "joao@exemplo.com"
-    assert finalizado["cliente"]["nome"] == _CLIENTE_APROVADO["nome"]  # cliente armazenado não muda
-    # Agente de liberação do dinheiro: transfere pro agência/conta do cliente
-    # (coletados no chat) o valor sugerido pela simulação interna, já que
-    # nenhuma proposta de parceiro foi aceita antes de finalizar.
-    assert finalizado["liberacao"]["transferido"] is True
-    assert finalizado["liberacao"]["transferencia"]["agencia"] == "1234"
-    assert finalizado["liberacao"]["transferencia"]["conta"] == "56789-0"
-    assert finalizado["liberacao"]["transferencia"]["valor"] == finalizado["simulacao"]["valor_sugerido"]
+    assert finalizado["cliente"]["nome"] == _CLIENTE_APROVADO["nome"]
+    # cpf/email agora ficam persistidos no `cliente` armazenado (antes só
+    # existiam na variável local de `finalizar`) — necessário pra
+    # `resolver_pendencia` conseguir usá-los depois, numa chamada separada.
+    assert finalizado["cliente"]["cpf"] == "111.111.111-11"
+    assert finalizado["cliente"]["email"] == "joao@exemplo.com"
+    # Agente de liberação do dinheiro: dinheiro nunca sai sozinho — a
+    # transferência pro agência/conta do cliente (coletados no chat) fica
+    # PROPOSTA, aguardando confirmação humana (ver liberacao.py), no valor
+    # sugerido pela simulação interna, já que nenhuma proposta de parceiro
+    # foi aceita antes de finalizar.
+    assert finalizado["liberacao"]["transferido"] is False
+    assert finalizado["liberacao"]["transferencia"] is None
+    assert finalizado["liberacao"]["transferencia_proposta"]["agencia"] == "1234"
+    assert finalizado["liberacao"]["transferencia_proposta"]["conta"] == "56789-0"
+    assert finalizado["liberacao"]["transferencia_proposta"]["valor"] == finalizado["simulacao"]["valor_sugerido"]
 
 
 def test_solicitacoes_finalizar_libera_valor_da_proposta_aceita():
@@ -228,9 +236,10 @@ def test_solicitacoes_finalizar_libera_valor_da_proposta_aceita():
         solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
         documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
     )
-    # O valor transferido segue a proposta ACEITA, não o valor interno bruto —
-    # as duas propostas raramente coincidem (cada parceiro tem seu spread).
-    assert finalizado["liberacao"]["transferencia"]["valor"] == proposta["valor_ofertado"]
+    # O valor PROPOSTO pra transferência segue a proposta ACEITA, não o valor
+    # interno bruto — as duas propostas raramente coincidem (cada parceiro
+    # tem seu spread).
+    assert finalizado["liberacao"]["transferencia_proposta"]["valor"] == proposta["valor_ofertado"]
 
 
 def test_solicitacoes_finalizar_sem_agencia_conta_deixa_transferencia_pendente():
@@ -247,9 +256,10 @@ def test_solicitacoes_finalizar_sem_agencia_conta_deixa_transferencia_pendente()
     assert finalizado["liberacao"]["transferencia"] is None
 
 
-def test_solicitacoes_finalizar_negativo_email_e_transferencia_saem_sozinhos():
-    """Sem `least_privilege`, os dois agentes de alto impacto (aprovação
-    notifica, liberação transfere) agem sozinhos — sem revisão humana."""
+def test_solicitacoes_finalizar_negativo_email_sai_sozinho_mas_transferencia_sempre_propoe():
+    """Sem `least_privilege`, o e-mail de aprovação sai sozinho — mas a
+    transferência do dinheiro NUNCA sai sozinha, com ou sem essa defesa
+    (política permanente de `liberacao.py`, não um toggle de aula)."""
     store.reset()
     solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
     finalizado = solicitacoes.finalizar(
@@ -258,13 +268,14 @@ def test_solicitacoes_finalizar_negativo_email_e_transferencia_saem_sozinhos():
     )
     assert finalizado["aprovacao"]["email_enviado"] is not None
     assert finalizado["aprovacao"]["email_pendente_revisao"] is None
-    assert finalizado["liberacao"]["transferido"] is True
-    assert finalizado["liberacao"]["transferencia_proposta"] is None
+    assert finalizado["liberacao"]["transferido"] is False
+    assert finalizado["liberacao"]["transferencia_proposta"] is not None
 
 
 def test_solicitacoes_finalizar_positivo_menor_privilegio_so_propoe():
-    """Com `least_privilege`, os dois agentes REDIGEM/PROPÕEM, não executam
-    sozinhos — mesmo o pedido sendo legitimamente aprovado."""
+    """Com `least_privilege`, o agente de aprovação REDIGE o e-mail em vez de
+    enviar sozinho — mesmo o pedido sendo legitimamente aprovado. A
+    transferência já propõe sempre, com ou sem essa defesa."""
     store.reset()
     solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
     finalizado = solicitacoes.finalizar(
@@ -297,12 +308,13 @@ def test_confirmar_liberacao_executa_a_transferencia_pendente():
 def test_confirmar_liberacao_sem_pendencia_lanca_value_error():
     store.reset()
     solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
-    solicitacoes.finalizar(  # sem least_privilege — já transferiu sozinho, nada pendente
+    solicitacoes.finalizar(
         solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
         documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
     )
+    solicitacoes.confirmar_liberacao(solicitacao["id"])  # confirma a proposta pendente (sempre existe)
     with pytest.raises(ValueError):
-        solicitacoes.confirmar_liberacao(solicitacao["id"])
+        solicitacoes.confirmar_liberacao(solicitacao["id"])  # já confirmada, nada mais pendente
 
 
 def test_solicitacoes_finalizar_positivo_saida_escapa_html_gerado_pelo_llm(monkeypatch):
@@ -327,6 +339,99 @@ def test_solicitacoes_finalizar_positivo_saida_escapa_html_gerado_pelo_llm(monke
     )
     assert "<script>" not in finalizado["aprovacao"]["justificativa"]
     assert "&lt;script&gt;" in finalizado["aprovacao"]["justificativa"]
+
+
+# ------------------------------------------ pendência de identidade (CPF) ---
+
+_DOCUMENTO_COM_IDENTIDADE = "NOME\nJoão Silva\nCPF\n123.456.789-00\n"
+
+
+def test_solicitacoes_finalizar_cpf_nao_confere_fica_pendente_aprovacao():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+    finalizado = solicitacoes.finalizar(
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo=_DOCUMENTO_COM_IDENTIDADE,
+    )
+    assert finalizado["status"] == "pendente_aprovacao"
+    assert finalizado["documento"]["discrepancia_identidade"] is True
+    assert finalizado["aprovacao"]["aprovado"] is None
+    # nem liberação nem e-mail correram ainda — não houve decisão de crédito.
+    assert finalizado["liberacao"] is None
+
+
+def test_solicitacoes_finalizar_cpf_confere_nao_fica_pendente():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+    finalizado = solicitacoes.finalizar(
+        solicitacao["id"], cpf="123.456.789-00", email="joao@exemplo.com",
+        documento_conteudo=_DOCUMENTO_COM_IDENTIDADE,
+    )
+    assert finalizado["status"] == "aprovada"
+    assert finalizado["documento"]["discrepancia_identidade"] is False
+
+
+def test_resolver_pendencia_aprovar_retoma_fluxo_normal():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+    solicitacoes.finalizar(
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo=_DOCUMENTO_COM_IDENTIDADE,
+    )
+    resolvido = solicitacoes.resolver_pendencia(solicitacao["id"], aprovar=True)
+    assert resolvido["status"] == "aprovada"
+    assert resolvido["aprovacao"]["aprovado"] is True
+    # dinheiro nunca sai sozinho — mesmo depois de resolver a pendência de
+    # identidade, a transferência fica proposta, aguardando um SEGUNDO botão
+    # (Confirmar transferência) na página Aprovações.
+    assert resolvido["liberacao"]["transferido"] is False
+    assert resolvido["liberacao"]["transferencia_proposta"] is not None
+
+
+def test_resolver_pendencia_rejeitar_reprova_direto():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+    solicitacoes.finalizar(
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo=_DOCUMENTO_COM_IDENTIDADE,
+    )
+    resolvido = solicitacoes.resolver_pendencia(solicitacao["id"], aprovar=False)
+    assert resolvido["status"] == "reprovada"
+
+
+def test_resolver_pendencia_sem_pendencia_lanca_value_error():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+    solicitacoes.finalizar(  # documento sem identidade -> nunca fica pendente
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
+    )
+    with pytest.raises(ValueError):
+        solicitacoes.resolver_pendencia(solicitacao["id"], aprovar=True)
+
+
+def test_confirmar_email_envia_o_email_pendente():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+    solicitacoes.finalizar(
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
+        defense_least_privilege=True,
+    )
+    confirmado = solicitacoes.confirmar_email(solicitacao["id"])
+    assert confirmado["aprovacao"]["email_pendente_revisao"] is None
+    assert confirmado["aprovacao"]["email_enviado"]["destinatario"] == "joao@exemplo.com"
+
+
+def test_confirmar_email_sem_pendencia_lanca_value_error():
+    store.reset()
+    solicitacao = solicitacoes.criar(dict(_CLIENTE_APROVADO))
+    solicitacoes.finalizar(  # sem least_privilege — já saiu sozinho, nada pendente
+        solicitacao["id"], cpf="111.111.111-11", email="joao@exemplo.com",
+        documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
+    )
+    with pytest.raises(ValueError):
+        solicitacoes.confirmar_email(solicitacao["id"])
 
 
 def test_solicitacoes_aceitar_proposta_negativo_qualquer_um_aceita():

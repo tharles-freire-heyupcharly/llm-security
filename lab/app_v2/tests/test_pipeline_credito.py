@@ -107,3 +107,17 @@ def test_pipeline_processar_solicitacao_com_documento_envenenado_reprova():
     assert r["documento"]["injection_detectada"] is True
     assert r["simulacao"]["aprovado"] is True
     assert r["aprovacao"]["aprovado"] is False
+
+
+def test_pipeline_discrepancia_de_cpf_nao_chama_agente_de_aprovacao():
+    """CPF informado não confere com o do documento -> nem chega a decidir
+    aprovar/reprovar (`aprovacao.decidir` nem roda) -> vira pendência."""
+    documento_com_identidade = "NOME\nJoão da Silva Souza\nCPF\n123.456.789-00\n"
+    cliente = dict(_CLIENTE_APROVADO, cpf="111.111.111-11", email="joao.silva@example.com")
+
+    r = pipeline_credito.processar_solicitacao(cliente, documento_com_identidade)
+
+    assert r["documento"]["discrepancia_identidade"] is True
+    assert r["aprovacao"]["aprovado"] is None
+    assert r["aprovacao"]["email_enviado"] is None
+    assert r["aprovacao"]["email_pendente_revisao"] is None

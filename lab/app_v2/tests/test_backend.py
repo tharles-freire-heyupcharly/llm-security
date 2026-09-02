@@ -763,10 +763,95 @@ def test_confirmar_liberacao_endpoint_sem_pendencia_da_400(client):
         files={"arquivo": ("documento.pdf", pdf, "application/pdf")},
     )
     r = client.post(f"/api/solicitacoes/{solicitacao['id']}/confirmar-liberacao")
-    assert r.status_code == 400
+    assert r.status_code == 200  # confirma a proposta pendente (sempre existe agora)
+
+    r = client.post(f"/api/solicitacoes/{solicitacao['id']}/confirmar-liberacao")
+    assert r.status_code == 400  # já confirmada, nada mais pendente
 
     r = client.post("/api/solicitacoes/999999/confirmar-liberacao")
     assert r.status_code == 404
+
+
+def test_solicitacoes_finalizar_endpoint_cpf_nao_confere_fica_pendente(client):
+    from labcore.scenarios import solicitacoes
+
+    solicitacao = solicitacoes.criar({
+        "nome": "João Teste", "renda": 6000, "valor": 20000, "prazo": 24,
+        "agencia": "1234", "conta": "56789-0",
+    })
+    pdf = pdf_com_texto(["NOME", "João Teste", "CPF", "123.456.789-00"])
+    r = client.post(
+        f"/api/solicitacoes/{solicitacao['id']}/finalizar",
+        data={"cpf": "111.111.111-11", "email": "joao@exemplo.com"},
+        files={"arquivo": ("documento.pdf", pdf, "application/pdf")},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "pendente_aprovacao"
+    assert body["documento"]["discrepancia_identidade"] is True
+    assert body["aprovacao"]["aprovado"] is None
+
+
+def test_resolver_pendencia_endpoint_aprovar_e_rejeitar(client):
+    from labcore.scenarios import solicitacoes
+
+    solicitacao = solicitacoes.criar({
+        "nome": "João Teste", "renda": 6000, "valor": 20000, "prazo": 24,
+        "agencia": "1234", "conta": "56789-0",
+    })
+    pdf = pdf_com_texto(["NOME", "João Teste", "CPF", "123.456.789-00"])
+    client.post(
+        f"/api/solicitacoes/{solicitacao['id']}/finalizar",
+        data={"cpf": "111.111.111-11", "email": "joao@exemplo.com"},
+        files={"arquivo": ("documento.pdf", pdf, "application/pdf")},
+    )
+
+    r = client.post(f"/api/solicitacoes/{solicitacao['id']}/resolver-pendencia", json={"aprovar": True})
+    assert r.status_code == 200
+    assert r.json()["status"] == "aprovada"
+
+    r2 = client.post("/api/solicitacoes/999999/resolver-pendencia", json={"aprovar": True})
+    assert r2.status_code == 404
+
+
+def test_resolver_pendencia_endpoint_sem_pendencia_da_400(client):
+    from labcore.scenarios import solicitacoes
+
+    solicitacao = solicitacoes.criar({"nome": "João Teste", "renda": 6000, "valor": 20000, "prazo": 24})
+    pdf = pdf_com_texto(["Nome completo, CPF e comprovante de renda anexados."])
+    client.post(
+        f"/api/solicitacoes/{solicitacao['id']}/finalizar",
+        data={"cpf": "111.111.111-11", "email": "joao@exemplo.com"},
+        files={"arquivo": ("documento.pdf", pdf, "application/pdf")},
+    )
+    r = client.post(f"/api/solicitacoes/{solicitacao['id']}/resolver-pendencia", json={"aprovar": True})
+    assert r.status_code == 400
+
+
+def test_confirmar_email_endpoint(client):
+    from labcore.scenarios import solicitacoes
+
+    client.post("/api/defenses", json={
+        "input_validation": False, "output_validation": False,
+        "least_privilege": True, "api_security": False,
+    })
+    solicitacao = solicitacoes.criar({"nome": "João Teste", "renda": 6000, "valor": 20000, "prazo": 24})
+    pdf = pdf_com_texto(["Nome completo, CPF e comprovante de renda anexados."])
+    client.post(
+        f"/api/solicitacoes/{solicitacao['id']}/finalizar",
+        data={"cpf": "111.111.111-11", "email": "joao@exemplo.com"},
+        files={"arquivo": ("documento.pdf", pdf, "application/pdf")},
+    )
+
+    r = client.post(f"/api/solicitacoes/{solicitacao['id']}/confirmar-email")
+    assert r.status_code == 200
+    assert r.json()["aprovacao"]["email_enviado"]["destinatario"] == "joao@exemplo.com"
+
+    r2 = client.post(f"/api/solicitacoes/{solicitacao['id']}/confirmar-email")
+    assert r2.status_code == 400  # já foi confirmado, nada mais pendente
+
+    r3 = client.post("/api/solicitacoes/999999/confirmar-email")
+    assert r3.status_code == 404
 
 
 def test_reset_limpa_lista_de_solicitacoes(client):

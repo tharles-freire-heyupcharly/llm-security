@@ -116,6 +116,28 @@
     min-width: 1.6rem;
   }
 
+  .diagram-toolbar { display: flex; gap: 0.5rem; margin-bottom: 0.7rem; }
+  .diagram-btn {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.02em;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-muted);
+    padding: 0.35rem 0.7rem; border-radius: 4px; cursor: pointer;
+  }
+  .diagram-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(10,10,14,0.78); display: none;
+    align-items: center; justify-content: center; padding: 2rem; z-index: 1000;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox-inner {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 2.2rem;
+    max-width: 96vw; max-height: 92vh; overflow: auto; position: relative;
+  }
+  .lightbox-inner svg { width: 100%; height: auto; }
+  .lightbox-close {
+    position: absolute; top: 0.7rem; right: 0.7rem; background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--ink); width: 2.1rem; height: 2.1rem; border-radius: 50%; cursor: pointer; font-size: 1.1rem; line-height: 1;
+  }
+
   footer {
     max-width: 760px; margin: 3.5rem auto 0; padding: 1.4rem 1.5rem 0; border-top: 1px solid var(--line);
     font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-muted); line-height: 1.7;
@@ -174,7 +196,13 @@
 
   <h2>Se só der para corrigir 3 coisas esta semana</h2>
   <p>Boa notícia: os 7 achados críticos não exigem 7 correções separadas — muitos compartilham a mesma causa raiz.</p>
-  <div class="table-wrap">
+  <div class="expandable" data-title="Se só der para corrigir 3 coisas esta semana">
+    <div class="diagram-toolbar">
+      <button type="button" class="diagram-btn btn-maximize">⤢ Maximizar</button>
+      <button type="button" class="diagram-btn btn-newtab">↗ Abrir em nova aba</button>
+    </div>
+    <div class="expandable-content">
+<div class="table-wrap">
     <table>
       <thead><tr><th>Ação</th><th>Achados críticos que resolve</th><th>Esforço</th></tr></thead>
       <tbody>
@@ -183,6 +211,8 @@
         <tr><td>Remover a identidade <code>admin1</code> / trocar por autenticação real</td><td class="num">13</td><td>Médio — exige mudança de desenho, não é um toggle</td></tr>
       </tbody>
     </table>
+  </div>
+    </div>
   </div>
   <p style="color:var(--ink-muted); font-size:0.92rem;">Três ações, sete achados críticos resolvidos — mas a terceira é a única que não se resolve ligando algo que já existe.</p>
 
@@ -206,3 +236,47 @@
     Avaliação de segurança CredSim · Etapa 5 de 6 · Sistema fictício, para fins educacionais (Curso LLM Security)
   </footer>
 </div>
+
+<div class="lightbox" id="lightbox">
+  <div class="lightbox-inner">
+    <button type="button" class="lightbox-close" id="lightbox-close" aria-label="Fechar">×</button>
+    <div id="lightbox-body"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var styleTag = document.querySelector('style');
+  var pageCSS = styleTag ? styleTag.textContent : '';
+  var lightbox = document.getElementById('lightbox');
+  var lightboxBody = document.getElementById('lightbox-body');
+
+  function closeLightbox() { lightbox.classList.remove('open'); lightboxBody.innerHTML = ''; }
+
+  document.querySelectorAll('.expandable').forEach(function (wrap) {
+    var content = wrap.querySelector('.expandable-content');
+    var btnMax = wrap.querySelector('.btn-maximize');
+    var btnTab = wrap.querySelector('.btn-newtab');
+    var title = wrap.getAttribute('data-title') || 'Diagrama';
+    if (btnMax) {
+      btnMax.addEventListener('click', function () {
+        lightboxBody.innerHTML = content.innerHTML;
+        lightbox.classList.add('open');
+      });
+    }
+    if (btnTab) {
+      btnTab.addEventListener('click', function () {
+        var html = '<!doctype html><html><head><meta charset="utf-8"><title>' + title + '</title>' +
+          '<style>' + pageCSS + '\nbody{padding:2.5rem; max-width:1100px; margin:0 auto;}</style>' +
+          '</head><body>' + content.innerHTML + '</body></html>';
+        var blob = new Blob([html], { type: 'text/html' });
+        window.open(URL.createObjectURL(blob), '_blank');
+      });
+    }
+  });
+
+  lightbox.addEventListener('click', function (e) { if (e.target === lightbox) closeLightbox(); });
+  document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeLightbox(); });
+})();
+</script>

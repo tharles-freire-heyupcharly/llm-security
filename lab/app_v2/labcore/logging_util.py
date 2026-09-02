@@ -37,6 +37,10 @@ _RISK_TRUE_FLAGS = (
     # painel de monitoramento. `gatilho_ativado` já existia aqui (era usado só
     # pelo Chat); `citacao_inexistente` é novo.
     "citacao_inexistente",
+    # `documento.py` — CPF digitado em "Finalizar solicitação" não confere com
+    # o CPF do documento enviado — vira uma solicitação `pendente_aprovacao`
+    # (ver `solicitacoes.py`), e também merece aparecer no painel.
+    "discrepancia_identidade",
 )
 # ~5 chamadas normais de sessão (ver api_exposta.LIMITE_CHAMADAS_POR_SESSAO x
 # CUSTO_POR_CHAMADA_USD) — acima disso, o padrão de uso já é atípico.

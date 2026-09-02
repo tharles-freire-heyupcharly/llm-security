@@ -270,6 +270,44 @@ def test_documento_envenenado_positivo_defesa_trata_como_dado():
     assert r["acao_executada"] is None
 
 
+# ------------------------------------------ documento: discrepância de CPF ---
+
+_DOC_COM_IDENTIDADE = "TITULAR\nJoão da Silva Souza\n...\nNOME\nJoão da Silva Souza\nRG\n12.345.678-9\nCPF\n123.456.789-00\n"
+
+
+def test_documento_sem_cpf_informado_nao_acusa_discrepancia():
+    r = documento.validate_document(_DOC_COM_IDENTIDADE, cliente_cpf=None)
+    assert r["discrepancia_identidade"] is False
+    assert r["identidade"]["cpf_no_documento"] == "123.456.789-00"
+
+
+def test_documento_cpf_confere_nao_acusa_discrepancia():
+    r = documento.validate_document(_DOC_COM_IDENTIDADE, cliente_cpf="123.456.789-00")
+    assert r["discrepancia_identidade"] is False
+    assert r["identidade"]["cpf_confere"] is True
+
+
+def test_documento_cpf_confere_ignorando_pontuacao_diferente():
+    r = documento.validate_document(_DOC_COM_IDENTIDADE, cliente_cpf="12345678900")
+    assert r["discrepancia_identidade"] is False
+
+
+def test_documento_cpf_nao_confere_acusa_discrepancia_pendente():
+    r = documento.validate_document(_DOC_COM_IDENTIDADE, cliente_cpf="111.111.111-11")
+    assert r["discrepancia_identidade"] is True
+    assert r["identidade"]["cpf_confere"] is False
+    assert r["identidade"]["nome_no_documento"] == "João da Silva Souza"
+    assert "pendente de revisão manual" in r["mensagem"]
+
+
+def test_documento_sem_campo_cpf_no_texto_nao_acusa_discrepancia():
+    """Upload de outro tipo de arquivo (sem os rótulos NOME/CPF) — nada pra
+    comparar, não dá pra acusar divergência."""
+    r = documento.validate_document("um texto qualquer sem esses campos", cliente_cpf="123.456.789-00")
+    assert r["discrepancia_identidade"] is False
+    assert r["identidade"]["cpf_no_documento"] is None
+
+
 # --------------------------------------------------------------------- rag ---
 
 def test_rag_negativo_vaza_entre_tenants():
@@ -783,12 +821,15 @@ def test_suporte_reflete_aprovacao_e_liberacao_apos_finalizar():
         documento_conteudo="Nome completo, CPF e comprovante de renda anexados.",
     )
     assert finalizado["aprovacao"]["aprovado"] is True  # sanity check dos dados usados no teste
-    assert finalizado["liberacao"]["transferido"] is True
+    # dinheiro nunca sai sozinho — fica proposto, aguardando confirmação
+    # humana na página Aprovações (ver labcore/scenarios/liberacao.py).
+    assert finalizado["liberacao"]["transferido"] is False
+    assert finalizado["liberacao"]["transferencia_proposta"] is not None
 
     r = suporte.perguntar(str(solicitacao["id"]))
     encontrado = next(reg for reg in r["registros_encontrados"] if reg["id"] == solicitacao["id"])
     assert encontrado["aprovado"] is True
-    assert encontrado["transferido"] is True
+    assert encontrado["transferido"] is False
     assert "aprovado" in r["resposta"].lower()
 
 

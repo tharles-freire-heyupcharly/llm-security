@@ -108,3 +108,18 @@ def decidir(cliente: dict, resultado_documento: dict, resultado_simulacao: dict,
         "aprovado": aprovado, "email_enviado": bool(email_enviado),
     })
     return result
+
+
+def confirmar_envio_email(proposta: dict) -> dict:
+    """Fecha o ciclo do menor privilégio pro lado do e-mail — mesmo padrão de
+    `liberacao.confirmar_transferencia`: um humano confirma o envio antes só
+    REDIGIDO (`email_pendente_revisao`). Sempre determinística (o texto já foi
+    escrito/aprovado na proposta, não passa pelo LLM de novo)."""
+    email_enviado = email_mcp.executar(
+        destinatario=proposta["destinatario"], assunto=proposta["assunto"], corpo=proposta["corpo"],
+    )
+    log_event({
+        "scenario": "aprovacao", "stage": "email_confirmado_por_humano",
+        "email_enviado": bool(email_enviado),
+    })
+    return {"email_enviado": email_enviado, "email_pendente_revisao": None}

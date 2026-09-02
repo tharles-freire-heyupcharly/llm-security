@@ -164,6 +164,7 @@
         <button class="navitem" id="nav-suporte" onclick="goto('suporte')">Suporte</button>
         <button class="navitem" id="nav-parceiros" onclick="goto('parceiros')">Portal de Parceiros</button>
         <button class="navitem" id="nav-interno" onclick="goto('interno')">Interno</button>
+        <button class="navitem" id="nav-aprovacoes" onclick="goto('aprovacoes')">Aprovações</button>
         <button class="navitem" id="nav-ajuda" onclick="goto('ajuda')">Ajuda</button>
         <button class="navitem" id="nav-tecnico" onclick="goto('tecnico')">Painel técnico</button>
         <button class="navitem" id="nav-roles" onclick="goto('roles')">Configuração de Roles</button>
@@ -295,7 +296,7 @@
 
             <div class="card" style="margin-top:18px;">
               <h2>Finalizar solicitação</h2>
-              <div class="page-sub">Encadeia 3 agentes: validação do documento acima → agente de aprovação do documento → agente de liberação do dinheiro (simula uma transferência direta para a conta do cliente).</div>
+              <div class="page-sub">Encadeia 3 agentes: validação do documento acima → agente de aprovação do documento → agente de liberação do dinheiro (propõe a transferência para a conta do cliente — sempre pendente de revisão humana, ver página Aprovações).</div>
               <div class="grid3">
                 <div class="field"><label>Solicitação</label>
                   <select id="finSolicitacaoId"><option value="">Carregando…</option></select>
@@ -487,6 +488,15 @@
             </div>
           </section>
 
+          <section class="page hidden" id="page-aprovacoes">
+            <div class="card">
+              <h2>Aprovações</h2>
+              <div class="page-sub">Fila única de pendências que precisam de revisão humana antes de continuar: identidade divergente (Documento), e-mail redigido aguardando revisão (só com privilégio mínimo ativo), transferência proposta aguardando confirmação (sempre — dinheiro nunca sai sozinho, com ou sem qualquer defesa). Visão de staff — não é um cenário de ataque a demonstrar.</div>
+              <div class="row"><button onclick="carregarAprovacoes()">Atualizar</button></div>
+            </div>
+            <div id="aprovacoesLista" style="margin-top:18px;"><p class="hint">Carregando…</p></div>
+          </section>
+
           <section class="page hidden" id="page-ajuda">
             <div class="card">
               <h2>Ajuda</h2>
@@ -574,7 +584,7 @@
           <section class="page hidden" id="page-solicitacao-detalhe">
             <div class="card">
               <h2>Solicitação — visão interna</h2>
-              <div class="page-sub">Aberta em uma aba separada a partir da página Interno. A única ação disponível aqui é confirmar uma transferência que ficou pendente de revisão humana (menor privilégio, Aula 5) — o resto é consulta.</div>
+              <div class="page-sub">Aberta em uma aba separada a partir da página Interno. Além da consulta, as ações de revisão pendente também ficam disponíveis aqui: confirmar identidade divergente, confirmar envio de e-mail (privilégio mínimo) e confirmar a transferência do dinheiro (sempre pendente de revisão humana, com ou sem qualquer defesa) — mesmas ações da página Aprovações, pra esta solicitação específica.</div>
             </div>
             <div id="solicitacaoDetalheWrap"><p class="hint">Carregando…</p></div>
           </section>
@@ -587,7 +597,7 @@
 const api = (p, opts) => fetch('/api' + p, opts).then(r => r.json());
 const brl = v => 'R$ ' + Number(v).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
 
-const PAGES = ['home','chat','simulacao','documento','analise','suporte','parceiros','interno','ajuda','tecnico','roles'];
+const PAGES = ['home','chat','simulacao','documento','analise','suporte','parceiros','interno','aprovacoes','ajuda','tecnico','roles'];
 
 function goto(page){ location.hash = '#/' + page; }
 
@@ -626,6 +636,7 @@ function route(){
   if (page === 'suporte') iniciarSuporte();
   if (page === 'parceiros') iniciarParceiros();
   if (page === 'interno') { mostrarInternoTab('simulacoes'); carregarSelectNegociacao(); }
+  if (page === 'aprovacoes') carregarAprovacoes();
   if (page === 'tecnico') carregarLogs();
   if (page === 'roles') iniciarRoles();
 }
@@ -706,8 +717,9 @@ async function enviar(){
 
 function statusBadge(status){
   const label = {propostas_disponiveis:'Propostas disponíveis', aceita:'Proposta aceita',
-                 aprovada:'Aprovada', reprovada:'Reprovada'}[status] || status;
-  const cls = status === 'reprovada' ? 'no' : 'ok';
+                 aprovada:'Aprovada', reprovada:'Reprovada',
+                 pendente_aprovacao:'Pendente de aprovação'}[status] || status;
+  const cls = (status === 'reprovada' || status === 'pendente_aprovacao') ? 'no' : 'ok';
   return `<span class="badge ${cls}">${label}</span>`;
 }
 
@@ -818,11 +830,12 @@ async function iniciarDocumento(){
   defValidacaoEntradaDocumento.checked = d.input_validation;
   defValidacaoSaidaDocumento.checked = d.output_validation;
   const partes = [
-    'Privilégio mínimo: <b>' + (d.least_privilege ? 'ligado' : 'desligado') + '</b> (ver Interno)',
+    'Privilégio mínimo (afeta o e-mail de aprovação): <b>' + (d.least_privilege ? 'ligado' : 'desligado') + '</b> (ver Interno)',
     'Segurança da API: <b>' + (d.api_security ? 'ligada' : 'desligada') + '</b> (ver Suporte/Parceiros)',
   ];
   document.getElementById('docOutrasDefesas').innerHTML =
-    'Também afetam esta página, controladas em outra tela: ' + partes.join(' · ') + '.';
+    'Também afetam esta página, controladas em outra tela: ' + partes.join(' · ') +
+    '. A liberação do dinheiro sempre passa por revisão humana em <button class="ghost" style="display:inline;padding:2px 8px;" onclick="goto(\'aprovacoes\')">Aprovações</button>, com ou sem essas defesas.';
 }
 
 async function carregarSelectSolicitacoes(){
@@ -854,12 +867,27 @@ async function finalizarSolicitacao(){
   renderizarResultadoFinalizacao(r);
 }
 
-// Nota: a confirmação da transferência pendente (menor privilégio) NÃO fica
-// aqui — este é o fluxo do CLIENTE final; deixar o próprio cliente confirmar
-// a própria transferência anularia o sentido de "revisão humana" (que é a
-// equipe, não quem pediu). O botão de confirmar mora na página Interno
+// Nota: a confirmação da transferência (sempre pendente — dinheiro nunca sai
+// sozinho, com ou sem qualquer defesa) NÃO fica aqui — este é o fluxo do
+// CLIENTE final; deixar o próprio cliente confirmar a própria transferência
+// anularia o sentido de "revisão humana" (que é a equipe, não quem pediu).
+// O botão de confirmar mora nas páginas Aprovações e Interno
 // (carregarSolicitacaoDetalhe), a visão de staff.
 function renderizarResultadoFinalizacao(r){
+  // Discrepância de identidade (CPF informado x CPF do documento): não há
+  // decisão de aprovado/reprovado ainda — pendente de revisão humana (ver
+  // página Aprovações). Ramo cedo pra não confundir com "Reprovado".
+  if (r.status === 'pendente_aprovacao') {
+    finResult.innerHTML =
+      '<div class="sim" style="border-color:var(--amber);">' +
+        '<span class="badge no">Pendente de aprovação</span>' +
+        '<p style="margin:10px 0 0;">' + r.aprovacao.justificativa + '</p>' +
+        '<p class="hint" style="margin-top:8px;">Documento: ' + r.documento.mensagem + '</p>' +
+        '<p class="hint" style="margin-top:8px;">Um responsável da equipe vai revisar em <button class="ghost" style="display:inline;padding:2px 8px;" onclick="goto(\'aprovacoes\')">Aprovações</button>.</p>' +
+      '</div>';
+    return;
+  }
+
   const aprovado = r.aprovacao.aprovado;
   const email = r.aprovacao;
   const lib = r.liberacao;
@@ -868,7 +896,9 @@ function renderizarResultadoFinalizacao(r){
     : (email.email_enviado ? '<p class="hint" style="margin-top:8px;">E-mail enviado automaticamente para ' + email.email_enviado.destinatario + '.</p>' : '');
   const libHtml = lib
     ? '<p class="' + (lib.transferido ? 'safe' : 'hint') + '" style="margin-top:8px;">Liberação do dinheiro: ' + lib.mensagem +
-      (lib.transferido && lib.transferencia ? ' (transação ' + lib.transferencia.transacao_id + ')' : '') + '</p>'
+      (lib.transferido && lib.transferencia ? ' (transação ' + lib.transferencia.transacao_id + ')' : '') +
+      (lib.transferencia_proposta ? ' <button class="ghost" style="display:inline;padding:2px 8px;" onclick="goto(\'aprovacoes\')">Ver em Aprovações</button>' : '') +
+      '</p>'
     : '';
   finResult.innerHTML =
     '<div class="sim" style="border-color:' + (aprovado ? 'var(--green)' : 'var(--red)') + ';">' +
@@ -1151,8 +1181,9 @@ async function iniciarRoles(){
 // um parâmetro. Chama /api/solicitacoes/{id} SEM `solicitante` — vê qualquer
 // solicitação, sempre, por design (diferente de `abrirSolicitacao`, que passa
 // `identidadeAtual` porque ali é o cliente final consultando o PRÓPRIO pedido).
-// Sem ação de aceitar/finalizar aqui — a única ação é confirmar uma
-// transferência pendente (menor privilégio, Aula 5, ver confirmarLiberacaoInterno).
+// Sem ação de aceitar/finalizar aqui — só as ações de revisão pendente:
+// identidade divergente, e-mail (privilégio mínimo) e a transferência do
+// dinheiro (sempre pendente, ver confirmarLiberacaoInterno).
 async function carregarSolicitacaoDetalhe(id){
   const s = await api('/solicitacoes/' + id);
   const wrap = document.getElementById('solicitacaoDetalheWrap');
@@ -1183,6 +1214,7 @@ async function carregarSolicitacaoDetalhe(id){
         <span class="badge no">E-mail aguardando revisão</span>
         <p style="margin:8px 0 0;">Para: ${s.aprovacao.email_pendente_revisao.destinatario}</p>
         <p class="hint" style="margin-top:4px;">${s.aprovacao.email_pendente_revisao.corpo}</p>
+        <div class="row" style="margin-top:8px;"><button class="green" onclick="confirmarEmailInterno(${s.id})">Confirmar envio de e-mail</button></div>
       </div>`
     : '';
   const transferenciaPendenteHtml = s.liberacao && s.liberacao.transferencia_proposta
@@ -1190,6 +1222,16 @@ async function carregarSolicitacaoDetalhe(id){
         <span class="badge no">Transferência aguardando confirmação</span>
         <p style="margin:8px 0 0;">${brl(s.liberacao.transferencia_proposta.valor)} — agência ${s.liberacao.transferencia_proposta.agencia}, conta ${s.liberacao.transferencia_proposta.conta}</p>
         <div class="row" style="margin-top:8px;"><button class="green" onclick="confirmarLiberacaoInterno(${s.id})">Confirmar transferência</button></div>
+      </div>`
+    : '';
+  const identidadeDivergenteHtml = s.status === 'pendente_aprovacao'
+    ? `<div class="sim" style="border-color:var(--amber);margin-top:14px;">
+        <span class="badge no">Identidade divergente</span>
+        <p style="margin:8px 0 0;">CPF informado: ${s.cliente.cpf || '—'} · CPF no documento: ${(s.documento && s.documento.identidade && s.documento.identidade.cpf_no_documento) || '—'}</p>
+        <div class="row" style="margin-top:8px;">
+          <button class="green" onclick="_resolverPendenciaApi(${s.id}, true).then(() => carregarSolicitacaoDetalhe(${s.id}))">Confirmar identidade e continuar</button>
+          <button class="ghost" onclick="_resolverPendenciaApi(${s.id}, false).then(() => carregarSolicitacaoDetalhe(${s.id}))">Rejeitar</button>
+        </div>
       </div>`
     : '';
 
@@ -1202,6 +1244,7 @@ async function carregarSolicitacaoDetalhe(id){
       <h2 style="margin-top:18px;">Propostas dos parceiros</h2>
       ${propostasHtml}
       <p class="hint" style="margin-top:14px;">Aprovação: ${aprovacaoHtml} &nbsp; Liberação: ${liberacaoHtml}</p>
+      ${identidadeDivergenteHtml}
       ${emailPendenteHtml}
       ${transferenciaPendenteHtml}
     </div>`;
@@ -1210,6 +1253,98 @@ async function carregarSolicitacaoDetalhe(id){
 async function confirmarLiberacaoInterno(id){
   await api(`/solicitacoes/${id}/confirmar-liberacao`, {method:'POST'});
   await carregarSolicitacaoDetalhe(id);
+}
+
+async function confirmarEmailInterno(id){
+  await api(`/solicitacoes/${id}/confirmar-email`, {method:'POST'});
+  await carregarSolicitacaoDetalhe(id);
+}
+
+// Fila única de pendências (página Aprovações) — reúne os 3 motivos que hoje
+// exigem revisão humana antes de continuar: identidade divergente
+// (`status: pendente_aprovacao`, ver documento.py), e-mail redigido aguardando
+// revisão (só com privilégio mínimo ativo) e transferência proposta
+// aguardando confirmação (sempre — dinheiro nunca sai sozinho, ver
+// liberacao.py). Cada card é a MESMA solicitação vista
+// de ângulos diferentes — uma pode aparecer em mais de uma lista ao mesmo tempo.
+async function carregarAprovacoes(){
+  const todas = await api('/solicitacoes');
+  const pendentesIdentidade = todas.filter(s => s.status === 'pendente_aprovacao');
+  const pendentesEmail = todas.filter(s => s.aprovacao && s.aprovacao.email_pendente_revisao);
+  const pendentesTransferencia = todas.filter(s => s.liberacao && s.liberacao.transferencia_proposta);
+  const total = pendentesIdentidade.length + pendentesEmail.length + pendentesTransferencia.length;
+  const el = document.getElementById('aprovacoesLista');
+
+  if (!total) {
+    el.innerHTML = '<div class="card"><p class="hint">Nenhuma pendência agora — tudo revisado.</p></div>';
+    return;
+  }
+
+  const linkSolicitacao = s =>
+    `<a href="#/solicitacao/${s.id}" target="_blank" rel="noopener">Solicitação #${s.id}</a> — <b>${s.cliente.nome}</b>`;
+
+  const cardIdentidade = s => {
+    const cpfDoc = (s.documento && s.documento.identidade && s.documento.identidade.cpf_no_documento) || '—';
+    return `<div class="sim" style="border-color:var(--amber);">
+      <span class="badge no">Identidade divergente</span>
+      <p style="margin:8px 0 0;">${linkSolicitacao(s)}</p>
+      <p class="hint" style="margin-top:4px;">CPF informado: ${s.cliente.cpf || '—'} · CPF no documento: ${cpfDoc}</p>
+      <div class="row" style="margin-top:10px;">
+        <button class="green" onclick="resolverPendenciaAprovacoes(${s.id}, true)">Confirmar identidade e continuar</button>
+        <button class="ghost" onclick="resolverPendenciaAprovacoes(${s.id}, false)">Rejeitar</button>
+      </div>
+    </div>`;
+  };
+
+  const cardEmail = s => `<div class="sim" style="border-color:var(--amber);">
+      <span class="badge no">E-mail aguardando revisão</span>
+      <p style="margin:8px 0 0;">${linkSolicitacao(s)}</p>
+      <p class="hint" style="margin-top:4px;">Para: ${s.aprovacao.email_pendente_revisao.destinatario}</p>
+      <p class="hint" style="margin-top:4px;">${s.aprovacao.email_pendente_revisao.corpo}</p>
+      <div class="row" style="margin-top:10px;"><button class="green" onclick="confirmarEmailAprovacoes(${s.id})">Confirmar envio de e-mail</button></div>
+    </div>`;
+
+  const cardTransferencia = s => `<div class="sim" style="border-color:var(--amber);">
+      <span class="badge no">Transferência aguardando confirmação</span>
+      <p style="margin:8px 0 0;">${linkSolicitacao(s)}</p>
+      <p class="hint" style="margin-top:4px;">${brl(s.liberacao.transferencia_proposta.valor)} — agência ${s.liberacao.transferencia_proposta.agencia}, conta ${s.liberacao.transferencia_proposta.conta}</p>
+      <div class="row" style="margin-top:10px;"><button class="green" onclick="confirmarLiberacaoAprovacoes(${s.id})">Confirmar transferência</button></div>
+    </div>`;
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>Identidade divergente <span class="hint">(${pendentesIdentidade.length})</span></h2>
+      ${pendentesIdentidade.length ? pendentesIdentidade.map(cardIdentidade).join('') : '<p class="hint">Nenhuma.</p>'}
+    </div>
+    <div class="card" style="margin-top:18px;">
+      <h2>E-mails aguardando revisão <span class="hint">(${pendentesEmail.length})</span></h2>
+      ${pendentesEmail.length ? pendentesEmail.map(cardEmail).join('') : '<p class="hint">Nenhum.</p>'}
+    </div>
+    <div class="card" style="margin-top:18px;">
+      <h2>Transferências aguardando confirmação <span class="hint">(${pendentesTransferencia.length})</span></h2>
+      ${pendentesTransferencia.length ? pendentesTransferencia.map(cardTransferencia).join('') : '<p class="hint">Nenhuma.</p>'}
+    </div>`;
+}
+
+// Chamada de API pura (sem decidir qual tela recarregar) — usada pelas duas
+// telas que mostram essa pendência: Aprovações (fila única) e a visão
+// interna de UMA solicitação (`carregarSolicitacaoDetalhe`).
+async function _resolverPendenciaApi(id, aprovar){
+  return api(`/solicitacoes/${id}/resolver-pendencia`, {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({aprovar}),
+  });
+}
+async function resolverPendenciaAprovacoes(id, aprovar){
+  await _resolverPendenciaApi(id, aprovar);
+  await carregarAprovacoes();
+}
+async function confirmarEmailAprovacoes(id){
+  await api(`/solicitacoes/${id}/confirmar-email`, {method:'POST'});
+  await carregarAprovacoes();
+}
+async function confirmarLiberacaoAprovacoes(id){
+  await api(`/solicitacoes/${id}/confirmar-liberacao`, {method:'POST'});
+  await carregarAprovacoes();
 }
 
 async function verificarSupplyChain(){

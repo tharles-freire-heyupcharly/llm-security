@@ -34,7 +34,8 @@ def papel_de(identidade) -> str:
 # não é enforcement de navegação, é documentação viva da política de acesso.
 # Mantenha as chaves em `pagina` EXATAMENTE iguais às da lista `PAGES` do
 # frontend (frontend/index.html): home, chat, simulacao, documento, analise,
-# suporte, parceiros, interno, ajuda, tecnico — mais "roles" pra esta página nova.
+# suporte, parceiros, interno, ajuda, tecnico, aprovacoes — mais "roles" pra
+# esta página nova.
 FUNCOES = [
     {"pagina": "home", "nome": "Início", "papeis": ["usuario", "empresa", "admin"]},
     {"pagina": "chat", "nome": "Chat (solicitar empréstimo)", "papeis": ["usuario", "admin"]},
@@ -44,6 +45,7 @@ FUNCOES = [
     {"pagina": "suporte", "nome": "Suporte (consultar solicitações)", "papeis": ["usuario", "admin"]},
     {"pagina": "parceiros", "nome": "Portal de Parceiros", "papeis": ["empresa", "admin"]},
     {"pagina": "interno", "nome": "Interno (gestão interna)", "papeis": ["admin"]},
+    {"pagina": "aprovacoes", "nome": "Aprovações (pendências de revisão humana)", "papeis": ["admin"]},
     {"pagina": "ajuda", "nome": "Ajuda", "papeis": ["usuario", "empresa", "admin"]},
     {"pagina": "tecnico", "nome": "Painel técnico", "papeis": ["admin"]},
     {"pagina": "roles", "nome": "Configuração de Roles", "papeis": ["admin"]},

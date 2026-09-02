@@ -181,6 +181,10 @@ class AceitarPropostaRequest(BaseModel):
     usuario: str = ""
 
 
+class ResolverPendenciaRequest(BaseModel):
+    aprovar: bool
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
     return _FRONTEND.read_text(encoding="utf-8")
@@ -392,6 +396,33 @@ def confirmar_liberacao_endpoint(solicitacao_id: int):
     `liberacao.py`). Sem proposta pendente, 400."""
     try:
         return solicitacoes.confirmar_liberacao(solicitacao_id)
+    except ValueError as exc:
+        status = 404 if "não encontrada" in str(exc) else 400
+        raise HTTPException(status_code=status, detail=str(exc))
+
+
+@app.post("/api/solicitacoes/{solicitacao_id}/confirmar-email")
+def confirmar_email_endpoint(solicitacao_id: int):
+    """Mesmo ciclo de `confirmar-liberacao`, agora pro e-mail de aprovação
+    (`email_pendente_revisao` — ver `aprovacao.py`). Sem e-mail pendente, 400."""
+    try:
+        return solicitacoes.confirmar_email(solicitacao_id)
+    except ValueError as exc:
+        status = 404 if "não encontrada" in str(exc) else 400
+        raise HTTPException(status_code=status, detail=str(exc))
+
+
+@app.post("/api/solicitacoes/{solicitacao_id}/resolver-pendencia")
+def resolver_pendencia_endpoint(solicitacao_id: int, req: ResolverPendenciaRequest):
+    """Fecha uma solicitação `pendente_aprovacao` (CPF informado não confere
+    com o do documento) — `aprovar=true` retoma o fluxo normal de
+    aprovação/liberação, `aprovar=false` rejeita direto."""
+    try:
+        return solicitacoes.resolver_pendencia(
+            solicitacao_id, req.aprovar,
+            defense_output=_defenses["output_validation"],
+            defense_least_privilege=_defenses["least_privilege"],
+        )
     except ValueError as exc:
         status = 404 if "não encontrada" in str(exc) else 400
         raise HTTPException(status_code=status, detail=str(exc))

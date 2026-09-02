@@ -232,7 +232,13 @@
   -d '{"input_validation": true, "output_validation": true, "least_privilege": true, "api_security": true, "guardrails": true}'</code>
 
   <h2>Checklist de entrada e modelo</h2>
-  <div class="table-wrap">
+  <div class="expandable" data-title="Checklist de entrada e modelo">
+    <div class="diagram-toolbar">
+      <button type="button" class="diagram-btn btn-maximize">⤢ Maximizar</button>
+      <button type="button" class="diagram-btn btn-newtab">↗ Abrir em nova aba</button>
+    </div>
+    <div class="expandable-content">
+<div class="table-wrap">
     <table>
       <thead><tr><th style="width:4ch"></th><th>Pergunta</th><th>Resposta na CredSim (estado de fábrica)</th></tr></thead>
       <tbody>
@@ -242,9 +248,17 @@
       </tbody>
     </table>
   </div>
+    </div>
+  </div>
 
   <h2>Checklist de saída e execução</h2>
-  <div class="table-wrap">
+  <div class="expandable" data-title="Checklist de saída e execução">
+    <div class="diagram-toolbar">
+      <button type="button" class="diagram-btn btn-maximize">⤢ Maximizar</button>
+      <button type="button" class="diagram-btn btn-newtab">↗ Abrir em nova aba</button>
+    </div>
+    <div class="expandable-content">
+<div class="table-wrap">
     <table>
       <thead><tr><th style="width:4ch"></th><th>Pergunta</th><th>Resposta na CredSim (estado de fábrica)</th></tr></thead>
       <tbody>
@@ -254,9 +268,17 @@
       </tbody>
     </table>
   </div>
+    </div>
+  </div>
 
   <h2>Checklist de monitoramento</h2>
-  <div class="table-wrap">
+  <div class="expandable" data-title="Checklist de monitoramento">
+    <div class="diagram-toolbar">
+      <button type="button" class="diagram-btn btn-maximize">⤢ Maximizar</button>
+      <button type="button" class="diagram-btn btn-newtab">↗ Abrir em nova aba</button>
+    </div>
+    <div class="expandable-content">
+<div class="table-wrap">
     <table>
       <thead><tr><th style="width:4ch"></th><th>Pergunta</th><th>Resposta na CredSim</th></tr></thead>
       <tbody>
@@ -266,11 +288,19 @@
       </tbody>
     </table>
   </div>
+    </div>
+  </div>
 
   <h2>A matriz que amarra o curso: componente × risco × controle</h2>
   <p>Cada linha cruza um componente (Passo 1), um risco OWASP 2025 (Passo 2) e o controle de defesa em profundidade que deveria cobri-lo (Aula 5). Uma célula vazia — controle que não existe, ou existe mas tem um jeito de contornar — é um achado, documentado no Passo 4.</p>
 
-  <div class="table-wrap">
+  <div class="expandable" data-title="Matriz componente × risco × controle">
+    <div class="diagram-toolbar">
+      <button type="button" class="diagram-btn btn-maximize">⤢ Maximizar</button>
+      <button type="button" class="diagram-btn btn-newtab">↗ Abrir em nova aba</button>
+    </div>
+    <div class="expandable-content">
+<div class="table-wrap">
     <table>
       <thead><tr><th>Componente</th><th>Risco principal</th><th>Controle esperado</th><th>Cobertura hoje</th></tr></thead>
       <tbody>
@@ -284,6 +314,8 @@
         <tr class="gap-row"><td>Controle de acesso / API exposta</td><td>LLM02 + LLM10</td><td><code>api_security</code></td><td><strong>Vazia para <code>admin1</code></strong> — nenhum toggle cobre um bypass fixo no código; para o resto (IDOR comum, rate limit) o controle existe e cobre.</td></tr>
       </tbody>
     </table>
+  </div>
+    </div>
   </div>
 
   <div class="callout">
